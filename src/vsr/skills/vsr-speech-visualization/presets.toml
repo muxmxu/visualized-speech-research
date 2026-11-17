@@ -1,0 +1,57 @@
+# Visualized! Speech Research — analysis presets.
+# Single source of truth: the vsr backend, the Display panel and vsr.plot all read this file.
+# Conversion to samples: docs/DESIGN.md §16. Values are decided by the Human; do not edit in implementation tasks.
+schema = 1
+
+[analysis]
+purpose = "默认检查：信号完整性与整体时频结构"
+window = "hann"
+win_ms = 40
+pow2_win = true
+hop_ratio = 0.25
+nfft_factor = 1
+yscale = "linear"
+f_min_hz = 0
+f_max_hz = 0          # 0 = Nyquist
+db = "auto80"
+cmap = "magma"
+
+[wideband]
+purpose = "共振峰、辅音、瞬态（hann 5 ms，-3 dB 带宽约 290 Hz）"
+window = "hann"
+win_ms = 5
+pow2_win = false
+hop_ms = 1
+nfft_factor = 4
+yscale = "linear"
+f_min_hz = 0
+f_max_hz = 8000
+db = "auto80"
+cmap = "magma"
+
+[narrowband]
+purpose = "谐波、F0、颤音（hann 32 ms，-3 dB 带宽约 45 Hz）"
+window = "hann"
+win_ms = 32
+pow2_win = false
+hop_ms = 5
+nfft_factor = 2
+yscale = "linear"
+f_min_hz = 0
+f_max_hz = 5000
+db = "auto80"
+cmap = "magma"
+
+[ltas]
+purpose = "长时平均频谱：音色、频谱倾斜、有效带宽、数据集对比"
+window = "hann"
+win_ms = 85
+pow2_win = true
+hop_ratio = 0.25
+nfft_factor = 1
+yscale = "log"
+f_min_hz = 50
+f_max_hz = 0
+db = "auto80"
+unit = "db_per_hz"           # 跨采样率、跨窗长可比
+active_only = true          # 只用活动帧（DESIGN §8.6）
