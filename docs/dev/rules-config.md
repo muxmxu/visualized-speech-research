@@ -1,6 +1,6 @@
 # 开发规则的配置文本
 
-`AGENTS.md`「开发规则（lifecycle v1）」的配套配置：M0 把下面的文本原样写入各自的文件（`pyproject.toml`、`frontend/eslint.config.js`、`frontend/package.json`、vitest 与 Playwright 配置、`scripts/check_diff_rules.py`）。`D<n>` 已填 D25（D25 是 run 之前的决策，记录在状态目录的 `history/`，见 `docs/dev/decisions.md` 开头的说明）。写入后它们属于 Protected standards（`LIFECYCLE.md`），只能经 Rules gate 修改。文本取自 run 之前的提案，配置块未作改动。
+`AGENTS.md`「开发规则（lifecycle v1）」的配套配置：M0 把下面的文本原样写入各自的文件（`pyproject.toml`、`frontend/eslint.config.js`、`frontend/package.json`、vitest 与 Playwright 配置、`scripts/check_diff_rules.py`）。D25 是原批准决定（记录在状态目录的 `history/`）；D39 按 H43 修正说明注释并精确排除两份受保护 Markdown 的格式检查。写入后它们属于 Protected standards（`LIFECYCLE.md`）。
 
 另有 `pyproject.toml` 的 `[tool.pytest.ini_options] testpaths = ["tests"]`，不属于上述 linter 配置：task 与 phase 的 worktree 在仓库内的 `agent_workspace/` 下，不限定 `testpaths` 时 pytest 会收集到其他 worktree 里的测试。
 
@@ -23,6 +23,10 @@ line-length = 100
 target-version = "py311"
 # 规则检查脚本是 long-term skill 的逐字节副本，不按本项目的风格改写；human-owned（D25）。
 extend-exclude = ["scripts/check_diff_rules.py"]
+
+[tool.ruff.format]
+# Preserve human-owned specification and bundled skill text (D39; H43).
+exclude = ["docs/DESIGN.md", "src/vsr/skills/vsr-speech-visualization/SKILL.md"]
 
 [tool.ruff.lint]
 select = [
@@ -65,7 +69,7 @@ export default defineConfig(
         tsconfigRootDir: import.meta.dirname,
       },
     },
-    // 行内的 eslint-disable 等指令无效，并以 warning 报告；`--max-warnings 0` 使其失败。
+    // Inline configuration directives are ignored and reported as warnings; --max-warnings 0 rejects them.
     // 例外只写在本文件，附理由与决策编号。
     linterOptions: { noInlineConfig: true, reportUnusedDisableDirectives: "error" },
     rules: {
