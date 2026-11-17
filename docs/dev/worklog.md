@@ -4,6 +4,15 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 本文件进 git：Human 的原话以 H<n> 引用（原文在状态目录的 `human-inputs.md`），不写个人信息与机器信息（本机相关的内容写在状态目录的 `local.md`）。run 开始之前的设计与接入记录在本机状态目录的 `history/`，不在本仓库。
 
+## 2026-11-17（M0 phase plan 启动）
+
+**按 H38–H41 接手并启动交互式 long-term run；M0 phase plan 已写，独立 Plan Review 判 FAIL 后完成唯一一次 Amendment A1。**
+
+- Codex long-term skill 已可用；基线与仓库身份核对通过，接手时已有两个未跟踪的包配置文件，先保留并核查。
+- `.gitignore` 已单独提交；编排契约使用仓库根的本地副本，未入 git。
+- Plan Review 的两项 finding 是周期交付条件的旧措辞和缺少独立 recon；原 FAIL 保留在 `cycles/C1/reports/plan-review-M0.md`，recon 见 `cycles/C1/reports/recon-M0.md`，修订见两个 C1 计划文件（D35）。
+- M0 计划覆盖 6 项验收与 3 项共同标准；环境兼容、浏览器可用性和独立 git 执行通道仍须在受影响 task 派发前验证。
+
 ## 2026-11-17（run 开始之前：开发转到树莓派节点）
 
 **按 H26、H33，开发节点从 Mac 转到树莓派（Raspberry Pi 5，aarch64，Linux）。代码经 GitHub 的 `origin`；状态目录按交接做法直接拷贝，附 kickoff 指令。run 尚未开始，状态为 `waiting-human`，由 Human 在树莓派上启动 Codex session 后接手。**

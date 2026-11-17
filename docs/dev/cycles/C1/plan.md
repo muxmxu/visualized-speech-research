@@ -2,6 +2,14 @@
 
 作者：Claude `opus`，决策型 Controller，兼任 Overall Planner（2026-11-16）。2026-11-16 按 long-term skill 的状态布局，由 `overall-plan.md` 移入本文件（T4）：各 phase 的目标、exit criteria 编号与风险沿用原文；增加了 phase `release`、目标版本与周期层面的说明，M4–M7 的行移到文末，留给 C2、C3 的周期计划参考。之后对本文件的修改一律按契约「延续规则」作 amendment，在本文件上修改并在 `decisions.md` 记录。
 
+## Amendment A1 — 2026-11-17
+
+This is the sole Planner amendment following `reports/plan-review-M0.md` FAIL and the completed independent `reports/recon-M0.md`.
+Review issue 1 is closed by reconciling R1.7 and the H34–H36 requirement mapping with current LIFECYCLE Integration Push and Delivery, without adding authorization or changing the PyPI boundary.
+Review issue 2 is closed as a planning-input defect in `phase-M0.md`, where the recon observations are bound and its unresolved facts remain explicit affected-task dispatch blocks.
+The review's invocation note is resolved in `phase-M0.md` as 21 baseline invocations plus seven reserve invocations, with this amendment consuming one reserve seat rather than silently expanding the budget.
+The original FAIL remains recorded, no second routine Plan Review is requested, and the git-executor block remains in force for task commits, dependent branching and T6.
+
 ## 周期
 
 - 周期 C1，目标版本 0.1.0（版本方案见 `LIFECYCLE.md` Delivery）。内容：DESIGN §19 的 M0–M3，加上 phase `release`（周期整合与交付）。
@@ -26,7 +34,7 @@
 | M1 | 频谱视口、Display 与 presets、Frequency Analysis、T-F 选框与框内试听、`vsr.dsp` 基础 API | M1.1–M1.12、M1.C1–C3 | M0 | high（DSP 标定与核心渲染决定后续所有 phase） |
 | M2 | tensor 载入与 `vsr.show` 推送、feature lane、mel、`vsr.plot`、`vsr skill install` | M2.1–M2.6、M2.C1–C3 | M1 | normal |
 | M3 | 编辑：波形编辑、T-F 选框删除 / 增益 / 提取、undo / redo、保存 | M3.1–M3.5、M3.C1–C3 | M1 | high（保存会改写用户文件） |
-| release | 周期整合与交付：全量回归、drift audit、docs 同步、性能测量并记录（§17）；版本 0.1.0、CHANGELOG、release 验收报告、install smoke、本地 tag | R1.1–R1.8 | M0–M3 | normal |
+| release | Cycle integration and delivery: full regression, drift audit, docs, §17 measurements, version 0.1.0, CHANGELOG, release acceptance, install smoke, annotated tag push and conditional GitHub Release under H34–H36. | R1.1–R1.8 | M0–M3 | normal |
 
 每个 milestone phase 的 phase plan 以一个 phase integration task 结束（合并、全量回归、`docs/acceptance/M<k>.md`）；task 与分支规则见 `LIFECYCLE.md` Integration。
 
@@ -38,7 +46,11 @@
 - **R1.4** 性能（D33、H27）：DESIGN §17 第 1–7 行在 run 所在的每个平台上、该平台可用的每个 `compute_device` 各测一次（3 次的中位数），数值写入 release 报告，并与同平台上一次的数值比较，回退写进 release 报告；release phase 的 integration task 在 squash 之后，在主工作树里把这次的测量行追加到 `docs/dev/performance.md`，不写在 task 或 phase 分支上（`LIFECYCLE.md` Checks 的 Performance budget）。§17 的数值是参考值，不作通过条件；没有为接近参考值而删减功能。
 - **R1.5** 版本与记录：`pyproject.toml` 的版本为 0.1.0；`CHANGELOG.md` 有 0.1.0 一节；`docs/acceptance/release-0.1.0.md` 存在，含 M0–M3 各验收报告的结论、与 DESIGN 的偏离、未决项。
 - **R1.6** install smoke 通过：从构建出的 wheel 在干净环境中安装并按 `LIFECYCLE.md` Delivery 的步骤运行，输出记入 release 报告。
-- **R1.7** 集成分支的 release commit 上有本地 tag `v0.1.0`；release、tag、commit 与报告路径记入 worklog 与 STATUS；controller 经 human channel 发出 heads-up。不 push、不发布。
+- **R1.7** The integration branch's release commit has the annotated tag `v0.1.0` with message `Release 0.1.0`, and delivery follows LIFECYCLE Integration Push and Delivery under H34–H36.
+  Each session's records commit and each milestone squash commit are followed by a `master` push to `origin`, and release delivery pushes the version tag without force-pushing or pushing task/phase branches.
+  A GitHub Release is created when local `gh` is installed and authenticated, otherwise only the tag is pushed and the Release page is reported NOT RUN with the reason in the release acceptance report.
+  PyPI uploads remain outside this run's authorized delivery, and the existing Delivery prerequisite for the Human's whole-tree and commit-metadata public-repository scan remains in force.
+  Release, tag, commit, push and conditional Release-page outcomes and report paths are recorded in worklog and STATUS, and the Controller sends the milestone/release heads-up through the human channel.
 - **R1.8** 保护区自基线以来未被改动；受跟踪文件的公共仓库扫描（整棵树，`LIFECYCLE.md` Checks）无命中。
 
 ## Human 需求的归属（编号见 `human-inputs.md`）
@@ -64,10 +76,17 @@
 | H17 Audition 式友好 UI、频谱框选试听与删除 | M0–M3 的 UI（DESIGN §9.6）；M1（框选、试听）；M3（删除、增益、提取） |
 | H18 完整产品流水线；开发与维护全部交给 AI；超长 run；开发规则对付过度防御 | 整个 run（`LIFECYCLE.md`、host contract、状态目录；开发规则见 AGENTS.md「开发规则（lifecycle v1）」，待合并） |
 | H19 三层放置；vsr 可能共享或公开，受跟踪文件不得含个人信息 | 每个 phase 的 check commands（公共仓库扫描）；R1.8 |
+| H34 standing authorization for automatic GitHub pushes. | Every milestone squash and session records commit under Integration Push, with release tag delivery in R1.7. |
+| H35 GitHub Release creation is authorized and PyPI upload is deferred. | Release R1.7, retaining the separate package-index authorization boundary. |
+| H36 use git until local `gh` is installed and authenticated. | Release R1.7 creates the Release page only when that prerequisite is available, otherwise records NOT RUN with its reason while pushing the tag. |
 
 ## Budget 估计
 
-每个 phase 约 5 个实现 task + 1 个验收 task；每个 task 需要 Worker、Auditor、Reviewer 各一次，加上 Phase Planner、Plan Reviewer，以及约 25% 的返工，合计每个 phase 约 25 次 invocation。C1 有 5 个 phase（M0–M3 与 release），约 125 次，其中 `sol` 档约 45 次（与原估计同比例：8 个 phase 约 200 次，其中 `sol` 档约 70 次）；预计不需要 `astra`。没有付费算力或外部费用。预算上限：未设（host contract 待审定事项 5）。
+The M0 estimate is now explicitly 28 invocations, comprising 21 baseline seats and seven reserve seats, with Amendment A1 consuming one reserve invocation.
+The other four C1 phases retain their provisional estimate of about 25 invocations each, so the rolling cycle estimate is about 128 rather than the original 125, without adding to M0's reserve.
+The original approximate cycle estimate of 45 `sol` invocations remains provisional, while M0 explicitly assigns seven baseline `sol` seats and one reserve `sol` amendment seat.
+M0 has one `astra` Plan Review seat, and subsequent new phase plans follow the current CODEX Plan Reviewer assignment rather than the original assumption of no `astra` usage.
+There is no declared paid-compute or external cost and no host-contract budget cap, while each phase retains the applicable estimate-overrun gate.
 
 ## Human 介入点
 

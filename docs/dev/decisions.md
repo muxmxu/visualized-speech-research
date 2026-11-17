@@ -19,3 +19,7 @@ D1–D27 是 run 开始之前（设计与接入阶段）的决策，记录在本
 - **D33 性能参考值按平台记录，不作通过条件（H27）。** DESIGN §17 现有数值作为 M 系列 Mac 的参考；其他平台（含 Raspberry Pi 5 cpu）的参考值在该平台首次测量后记在 `docs/dev/performance.md`；run 在其运行的每个平台上测量，与同平台上一次比较，回退写进验收报告。依据：H27；其他平台的数值事先无从得知。涉及产品。回退：由 Human 给出各平台数值写进 §17。
 - **D34 controller 的决定只写本文件，不在主工作树编辑 `docs/DESIGN.md`。** 涉及产品的决定标「涉及产品」；controller 派发该分支线上（主线或 hotfix 周期）的下一个 integration task 时列出这些编号，由该 task 在其 worktree 中追加到 §21，随 squash 或合并进入 `master`。task 与 reviewer 在 §21 追加之前引用 D<n> 时，以本文件为准。task 自己的补充决定仍由 task 在其分支追加到 §21。依据：主工作树固定在 `master`（D29），controller 若在那里改 DESIGN，之后的 `git merge --squash` 会因本地改动中止（review-TaskB-2 在临时仓库中复现）。回退：改为 controller 在主工作树写 §21 并在 integration 之前单独提交它。
 
+## 2026-11-17（M0 计划复核后的修订）
+
+- **D35 按现行交付授权修订 C1 周期计划，M0 计划绑定独立 recon。** M0 的首次 Plan Review 结论为 FAIL，指出 R1.7 的旧禁止 push 语句与 H34–H36、LIFECYCLE 的 Push 规则相冲突，且初稿缺少独立 recon 输入。Overall Planner 只作一次 Amendment A1：R1.7 改为按已有授权 push 与条件性创建 GitHub Release；recon 的事实写入 M0 phase plan，未验证的环境与执行通道保留为派发阻塞。依据：`cycles/C1/reports/plan-review-M0.md` 与 `recon-M0.md`。此决定不改变产品范围，也不增添新的发布授权。回退：如既有授权变化，按新的 Human 输入重新修订交付标准。
+
