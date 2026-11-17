@@ -156,6 +156,7 @@ Add Frequency Analysis below Lanes on first use and when a restored workspace la
 Seed the T5 browser regression with the original M0 panel IDs in `vsr-layout`, open Frequency Analysis from the restored layout, verify it plots data, and check it persists once beside the retained M0 panels and Display after reload.
 Throttle hover frame requests to animation frames and abort superseded frame requests.
 Use the single-lane fixture and a multi-lane fixture to assert data, plotted curve counts, stable identities, unit/axis labels and request behavior across hover and method changes.
+Expose the actual Frequency Analysis plot root and its rendered curve, axis, label and visible legend layers in `FrequencyAnalysis.tsx` for T7 capture and clipping.
 Write `frontend/src/{App.tsx,styles.css}`, `frontend/src/api/{client,types}.ts`, `frontend/src/panels/FrequencyAnalysis.tsx`, `frontend/tests/frequencyAnalysis.test.ts` and `frontend/tests/e2e/m1-frequency.spec.ts`.
 Run `npm run typecheck && npm test && npm run lint && npm run build && npx playwright test --workers=1 tests/e2e/m1-frequency.spec.ts`.
 T6 attaches T-F time/visible-band constraints to the resulting analysis input.
@@ -176,6 +177,7 @@ With a rectangle longer than 20 s, capture the first two prefetched PCM requests
 
 Deliver the accepted A1 design using current workspace layers and browser-native raster and download primitives.
 Use the independently verified T4/T6 surface geometry and rendering, including scroll, clips, actual framebuffer pixels, canvas layers and displayed annotations inside the crop.
+Use T5's rendered Frequency Analysis plot root and layers for the same visible-region export, clipped to the plot and its visible ancestors.
 Capture the same rendered state used on screen, with logical pointer coordinates converted once to device pixels and without extra audio API or DSP operations.
 Keep export selection and cancellation independent of time and T-F selections, use the design's viewport exclusions and avoid adding interfaces for M2 features before they exist.
 Write `frontend/src/{App.tsx,styles.css}`, `frontend/src/state/pdfSelection.ts`, `frontend/src/lanes/{SpectralLane,ExportSelection}.tsx`, `frontend/src/render/{spectrogram,workspaceCapture,pdf}.ts`, `frontend/tests/pdf.test.ts` and `frontend/tests/e2e/m1-pdf.spec.ts`.
@@ -183,6 +185,8 @@ Run `npm run typecheck && npm test && npm run lint && npm run build && npx playw
 Freeze playback and viewport in the real Chromium fixture and capture independent browser screenshot pixels before activating the export tool.
 Use the A1 reader procedure to decode the actual one-page downloaded raster, then compare each crop-relative sample against the same device-pixel position in the screenshot.
 Check separated interior regions on the spectrogram, waveform and visible annotation against the accepted encoding tolerance at nonunit DPR with a scrolled plot.
+Download a separate crop of a visible Frequency Analysis plot and compare its decoded curve, axis, label and displayed legend pixels to the corresponding positions in an independent Chromium screenshot under the same A1 tolerance.
+Assert that clipping excludes dock tabs and panel controls along the drag.
 Assert crop dimensions and excluded pixels so shifted, stale or gesture-contaminated composition fails, and check unchanged audio selections and zero export-triggered data requests.
 Verify a temporary downloaded sample independently in a PDF reader available to the Auditor, with missing execution reported under project gate 2 and no conditional e2e skip.
 Provide M1.13 and a screenshot of the crop interaction as human evidence.

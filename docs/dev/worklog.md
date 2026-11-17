@@ -6,6 +6,8 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+A1's first mechanical audit passed, but semantic review 1 found that PDF capture omitted the visible Frequency Analysis plot, a DPR-dependent crop edge differed by one pixel, and masked FFT/window validation was incomplete.
+The A1 Worker repaired those three findings, and independent audit 2 and semantic review 2 passed on the same DESIGN diff with no rule REVIEW entries.
 H45 adds a visible-workspace crop exported as a single-page raster PDF, and the M1 reconnaissance verified browser WebGL2 and a synthetic downloadable PDF that an independent reader opened.
 The independent architecture Plan Review found one integration-order defect, and the independent M1 Plan Review found four task-contract and verification defects.
 The Overall Planner completed the contract's single amendment before architecture dispatch, including D43's masked PCM selection bounds and H54's UI repair criteria.
