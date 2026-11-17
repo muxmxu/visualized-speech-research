@@ -4,6 +4,14 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 本文件进 git：Human 的原话以 H<n> 引用（原文在状态目录的 `human-inputs.md`），不写个人信息与机器信息（本机相关的内容写在状态目录的 `local.md`）。run 开始之前的设计与接入记录在本机状态目录的 `history/`，不在本仓库。
 
+## 2026-11-18 (M0 integration and acceptance)
+
+M0 was integrated from the five reviewed task branches, and the final main code commit is `99286649b43569fea9153c9a5ecd6753886f4377`.
+The phase and main final trees each passed 35 pytest tests, 18 Vitest tests, and 19 one-worker Chromium tests, together with the required dependency, type, lint, and build checks.
+The real-browser zero-width playback regression was RED before repair and GREEN afterward, and final mechanical audit 2 and semantic review 2 passed.
+The first CPU benchmark recorded 4.173, 4.188, and 3.721 seconds for a generated ten-minute stereo WAV, with a 4.173-second median and no prior same-platform value.
+The M0 code commit was pushed, and the next lifecycle step is M1 planning and architecture with H45's visible-region PDF export.
+
 ## 2026-11-17 (M0-T5 amendment A3)
 
 M0-T5 passed final independent mechanical audit 7 and semantic review 3 on the same five-file tree, including all 11 browser playback tests and V1#1 dispositions for two request-boundary catches.
