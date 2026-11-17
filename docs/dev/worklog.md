@@ -4,6 +4,16 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 本文件进 git：Human 的原话以 H<n> 引用（原文在状态目录的 `human-inputs.md`），不写个人信息与机器信息（本机相关的内容写在状态目录的 `local.md`）。run 开始之前的设计与接入记录在本机状态目录的 `history/`，不在本仓库。
 
+## 2026-11-17（M0 实施启动）
+
+**按 H38–H42 持续推进；M0-T1 已完成首轮实现，但独立机械审计为 FAIL，等待 Rules gate 的最小修正。**
+
+- 环境验证见 `cycles/C1/reports/preflight-M0.md`：临时 Python 与前端依赖可安装，回环端口可用；浏览器与最终应用测试尚未验证。
+- preflight 首次 npm 安装误写了接手前未跟踪的根包文件并生成依赖目录；执行者发现后停止，清理由其创建的目录，并依接手记录重建根文件。原始字节未备份，不能声称逐字节恢复。
+- 另以独立顶层执行进程验证了 Worker 通道；task 分支提交与最终整合的角色分工交 consultant 核定。T1 实现、核验尚在进行。
+- T1 的 Python import、`ruff check`、前端 typecheck/lint/build 通过；Mechanical Audit 报 `check_diff_rules.py` C5 FAIL 与 `ruff format --check` 对两份保护文档的 FAIL，见 `cycles/C1/reports/M0-T1-audit-1.md`。未派 Task Reviewer，也未提交该 task 分支。
+- consultant 确认须走 Rules gate；最小修正案已向 Human 提出，答复未到前不改保护配置。独立浏览器预检在临时目录验证 Chromium 与 Web Audio 可用，见 `cycles/C1/reports/browser-preflight-M0.md`。
+
 ## 2026-11-17（M0 phase plan 启动）
 
 **按 H38–H41 接手并启动交互式 long-term run；M0 phase plan 已写，独立 Plan Review 判 FAIL 后完成唯一一次 Amendment A1。**

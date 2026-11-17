@@ -22,4 +22,7 @@ D1–D27 是 run 开始之前（设计与接入阶段）的决策，记录在本
 ## 2026-11-17（M0 计划复核后的修订）
 
 - **D35 按现行交付授权修订 C1 周期计划，M0 计划绑定独立 recon。** M0 的首次 Plan Review 结论为 FAIL，指出 R1.7 的旧禁止 push 语句与 H34–H36、LIFECYCLE 的 Push 规则相冲突，且初稿缺少独立 recon 输入。Overall Planner 只作一次 Amendment A1：R1.7 改为按已有授权 push 与条件性创建 GitHub Release；recon 的事实写入 M0 phase plan，未验证的环境与执行通道保留为派发阻塞。依据：`cycles/C1/reports/plan-review-M0.md` 与 `recon-M0.md`。此决定不改变产品范围，也不增添新的发布授权。回退：如既有授权变化，按新的 Human 输入重新修订交付标准。
+- **D36 framed binary 的补齐和多数组偏移约定。** `docs/DESIGN.md` §6 的 8 字节边界从整条消息的首字节起算，因此 payload 起点是 `4 + header_len` 向上补齐到 8 的倍数；多数组的 `offset` 从 payload 首字节起算，各数组起点按 8 字节对齐。依据：§6 的消息布局及「payload 依次拼接」；该约定让 Python 与 TypeScript 的往返可逐字节核对。涉及产品；由 M0 integration task 追加至 DESIGN §21。回退：经 Scope gate 修改 §6 并同步两个 codec。
+- **D37 设备 self-check 的相对误差约定。** 对 DESIGN §4 指定的 stft、istft、rfft、matmul 分别在候选设备和 CPU 上用相同的非零合成输入计算，误差为 `||candidate-reference||₂ / ||reference||₂`，每项严格小于 `1e-4` 才通过。依据：§4 的四项算子与相对误差阈值；分母选非零参考避免无定义比值。涉及产品；由 M0 integration task 追加至 DESIGN §21。回退：经 Scope gate 修改 §4 并同步 self-check 与测试。
+- **D38 M0 的 Git 事务使用独立顶层 Worker 会话。** 已验证独立进程能启动与当前 Controller 分离的顶层执行主会话；按 consultant 结论，T1–T5 的任务 diff 经独立审核后，由该会话执行 `impl check`、精确 stage 和 task 分支 commit。T6 由同类顶层 integration Worker 独占最终树，按 LIFECYCLE 执行 merge、检查与 squash；Controller 不合并，collaboration subagent 不 stage、commit 或 push。依据：H41 已授权 Git 操作、M0 计划的执行通道阻塞、`impl` 与 LIFECYCLE 的角色边界。当前只读调用已验证，写入事务须以首次实际结果为证据。回退：顶层通道不可用时停止依赖分支与 T6 派发，另作执行通道决定。
 
