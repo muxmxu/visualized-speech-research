@@ -6,6 +6,10 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+A2 froze the reviewed A1 DESIGN change in phase/arch, and independent phase audit and semantic review passed before the master squash.
+The phase and new master each passed 35 pytest tests, 18 Vitest tests, 19 one-worker Chromium tests, dependency installation, Ruff, typecheck, lint, and build.
+The new master architecture commit is `00fea16c7cbc17da95b82ffd95db467132fa756c`, and its DESIGN diff is byte-identical to the reviewed phase diff.
+The architecture commit was pushed, and M1 implementation may start from that baseline.
 A1's first mechanical audit passed, but semantic review 1 found that PDF capture omitted the visible Frequency Analysis plot, a DPR-dependent crop edge differed by one pixel, and masked FFT/window validation was incomplete.
 The A1 Worker repaired those three findings, and independent audit 2 and semantic review 2 passed on the same DESIGN diff with no rule REVIEW entries.
 H45 adds a visible-workspace crop exported as a single-page raster PDF, and the M1 reconnaissance verified browser WebGL2 and a synthetic downloadable PDF that an independent reader opened.
