@@ -1,0 +1,71 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "visualized-speech-research"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "torch", "numpy", "scipy", "soundfile", "sounddevice", "librosa",
+    "fastapi", "uvicorn[standard]",
+]
+
+[project.optional-dependencies]
+world = ["pyworld"]
+safetensors = ["safetensors"]
+plot = ["matplotlib"]
+
+[project.scripts]
+vsr = "vsr.cli:main"
+
+[dependency-groups]
+dev = ["pytest", "ruff", "httpx"]
+
+[tool.hatch.build]
+artifacts = ["src/vsr/web/**"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/vsr"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# 规则检查脚本是 long-term skill 的逐字节副本，不按本项目的风格改写；human-owned（D25）。
+extend-exclude = ["scripts/check_diff_rules.py"]
+
+[tool.ruff.format]
+# Preserve human-owned specification and bundled skill text (D39; H43).
+exclude = ["docs/DESIGN.md", "src/vsr/skills/vsr-speech-visualization/SKILL.md"]
+
+[tool.ruff.lint]
+select = [
+    "E", "F", "W", "I", "UP", "B",      # 基线
+    "BLE001",                            # 笼统的 except Exception
+    "S110", "S112",                      # try-except-pass、try-except-continue
+    "SIM105",                            # try-except-pass 应写成 contextlib.suppress
+    "TRY201", "TRY203",                  # 多余的 re-raise 与只会重新抛出的处理器
+    "ERA001",                            # 被注释掉的代码
+    "PGH003", "PGH004", "RUF100",        # 笼统的 type: ignore 与 noqa，无用的 noqa
+    "PT011", "PT012",                    # pytest.raises 过宽、块内有多条语句
+]
+
+[tool.ruff.lint.flake8-bandit]
+# S110 与 S112 默认只查 Exception 与裸 except；打开后具名异常也查，与规则检查脚本的 C2 一致。
+check-typed-exception = true
+
+[tool.ruff.lint.flake8-bugbear]
+# 下列调用作默认参数是规范写法：插件 API 的 Param（DESIGN §12）与 FastAPI 的参数声明（§7）。
+# 不列出时，参数没有不可变类型标注的签名会触发 B008（D25）。
+extend-immutable-calls = ["vsr.api.Param", "fastapi.Depends", "fastapi.Query", "fastapi.Body", "fastapi.Path"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu", marker = "sys_platform == 'linux' and platform_machine == 'aarch64'" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
