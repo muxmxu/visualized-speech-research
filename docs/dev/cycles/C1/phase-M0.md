@@ -226,6 +226,15 @@ No new tolerance is substituted for a DESIGN threshold.
 - Verification: Auditor `luna(xhigh)` executes unit/browser checks, then Reviewer `sol(high)` checks observable behavior, request handling, task scope, and UI conformity.
 - Acceptance mapping: M0.1, visual part of M0.2, M0.4, M0.6, and screenshot support for M0.C2.
 
+### Amendment A2 — Zero-width resize and recovery acceptance
+
+This task-level amendment follows the two consecutive semantic-review FAIL verdicts in `reports/M0-T4-review-1.md` and `reports/M0-T4-review-2.md`, under the orchestration contract's Review cap.
+T4 acceptance additionally requires the real-backend Chromium regression `workspace survives zero waveform width and recovers when widened` in the existing `frontend/tests/e2e/m0-workspace.spec.ts`.
+The regression must open generated audio, resize from positive waveform width through a layout where the observed canvas client width is zero, assert that the dock workspace remains attached, then widen the layout and assert that the same waveform is visible with positive width and its timeline labels restored.
+Retain evidence that this regression fails on the pre-repair tree and passes on the repaired tree, and retain the existing sample-zoom regression for distinct increasing ruler labels at positive widths.
+The existing T4 acceptance commands include this regression, and independent verification must cover the zero-width repair and recovery evidence without weakening or replacing any existing test or expanding T4's scope or write set.
+The two original FAIL verdicts remain historical, and any further semantic-review FAIL after A2 makes T4 BLOCKED under the Review cap.
+
 ## T5 — Synchronized browser transport and playback evidence
 
 - Task type and role row: multi-module implementation, `terra(high)` Worker.

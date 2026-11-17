@@ -4,6 +4,18 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 本文件进 git：Human 的原话以 H<n> 引用（原文在状态目录的 `human-inputs.md`），不写个人信息与机器信息（本机相关的内容写在状态目录的 `local.md`）。run 开始之前的设计与接入记录在本机状态目录的 `history/`，不在本仓库。
 
+## 2026-11-17 (M0-T4 waveform workspace)
+
+**The waveform workspace passed final independent audit and semantic review, and task branch commit `000c608d3f7cc8330c7523242fe7cc4f3908cd00` contains its implementation and browser tests.**
+
+- Initial browser coverage passed but omitted continuous viewport request cadence, cached redraw, several interactions, and a complete readiness fixture; audit-1 failed and targeted tests failed on the old code before the repair.
+- Review-1 reproduced inverted selection, duplicate sample-level ruler labels, and unauthorized fixture readiness catches; browser regressions failed on the old code before the repair.
+- Audit-3 reproduced a cleanup hang for a signal-exited child; its regression failed before the cleanup repair, and audit-4 passed afterward.
+- Amendment A2 added the required zero-width resize and recovery regression after two consecutive semantic-review failures, preserving the existing task scope and tests.
+- Review-2 reproduced a zero-width ruler crash; the final browser regression failed before the repair, then audit-5 and review-3 passed.
+- Final checks passed: frontend typecheck, 7 unit tests, lint, build, 7 real-backend Playwright tests, and rule check with `0 FAIL, 3 REVIEW`, all three dispositioned `V1#1`.
+- H48 added B4 for RIR coefficient-versus-delay visualization and direct/subsequent arrival readouts in M7.
+
 ## 2026-11-17 (M0-T3 authenticated audio backend)
 
 **The T3 backend passed independent mechanical audit and semantic review, and its task branch was committed as `49303ebd4e479d459629613aa6ca206d0a9c27c5`.**
