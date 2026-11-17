@@ -10,18 +10,36 @@ Review issue 2 is closed as a planning-input defect in `phase-M0.md`, where the 
 The review's invocation note is resolved in `phase-M0.md` as 21 baseline invocations plus seven reserve invocations, with this amendment consuming one reserve seat rather than silently expanding the budget.
 The original FAIL remains recorded, no second routine Plan Review is requested, and the git-executor block remains in force for task commits, dependent branching and T6.
 
+## Amendment A2 — 2026-11-18
+
+H45 authorizes the visible-region workspace PDF export and the associated DESIGN amendment under B3 and D40.
+The `arch` phase follows accepted M0 and integrates the PDF specification before M1 implementation starts.
+M1.13 appends the PDF acceptance test after the original M1.1–M1.12, and M2 reuses the export for feature and mel views as those views become available.
+H48 remains assigned to M7 in C3 under B4.
+
+## Amendment A3 — 2026-11-18
+
+The sole Planner amendment following the independent [arch Plan Review](reports/plan-review-arch.md) and [M1 Plan Review](reports/plan-review-M1.md) FAIL records the changes below.
+The [arch phase plan](phase-arch.md) adds D43 in DESIGN §§7, 9.4 and 21 to distinguish each masked PCM chunk from its full T-F rectangle before M1 dispatch.
+A2 requires independent audit and review of the frozen phase revision before squash, then full checks and DESIGN diff equality on the new master revision.
+The [M1 phase plan](phase-M1.md) specifies the exact M1.10 benchmark, restored M0-layout panel entry, viewport pixel assertions and source-browser-to-PDF pixel comparison.
+H54 assigns practical DESIGN §9 workspace improvements and desktop/narrow Chromium captures to M1-T4, with an integrated screenshot in T8.
+The original review verdicts remain recorded and the amendment follows the CODEX rule for dispatch.
+
 ## 周期
 
 - 周期 C1，目标版本 0.1.0（版本方案见 `LIFECYCLE.md` Delivery）。内容：DESIGN §19 的 M0–M3，加上 phase `release`（周期整合与交付）。
 - 后续周期（各自开始时再写计划）：C2 = M4–M5 → 0.2.0；C3 = M6–M7 → 0.3.0（`LIFECYCLE.md` Roadmap）。
-- 没有 `arch` phase：DESIGN §0–§20 对 M0–M3 已经完整，并经过设计 review 与关闭复审（D10–D13 是 run 之前的决策，记录在状态目录的 `history/`，见 `docs/dev/decisions.md` 开头的说明）。实现中遇到的缺口，由遇到它的 task 按 AGENTS.md「工作方式」记为 DESIGN §21 的一条决定；缺口需要 spec delta 时，按延续规则作 amendment，增加 `arch` phase。
-- 顺序：M0 → M1 → M2 → M3 → release 严格串行（单个 Controller，减少合并冲突）。depends 列是真实依赖，供 amendment 时参考。
-- 本 plan 不经 Plan Review；M0 的 Plan Review 核对 Human 需求的归属与 exit criteria 的覆盖。
+- The `arch` phase covers H45 in DESIGN §§1, 9, 19, 20 and 21 and D43 in §§7, 9.4 and 21.
+  The protected §1 and §19 additions are covered by H45.
+- The phase order is M0 → arch → M1 → M2 → M3 → release.
+- The overall plan retains its initial M0 coverage review, and the H45 amendment is covered by the independent arch and M1 Plan Reviews.
 - M0 另须写入开发规则的配套配置（D25 是 run 之前的决策，记录在状态目录的 `history/`，见 `docs/dev/decisions.md` 开头的说明）：`pyproject.toml` 的 `[tool.ruff*]` 表、`frontend/eslint.config.js`、`package.json` 的 `lint` 脚本、vitest 的 `allowOnly: false, retry: 0`、Playwright 的 `forbidOnly: true, retries: 0`，文本取自 `docs/dev/rules-config.md`，`D<n>` 已填 D25；TypeScript 限在 6.0.x（同文件）；另在 `pyproject.toml` 补 `[tool.pytest.ini_options]` 的 `testpaths = ["tests"]`，因为 task 与 phase 的 worktree 在仓库内的 `agent_workspace/` 下，不限定 `testpaths` 时 pytest 会收集到其他 worktree 里的测试。写入后它们属于 Protected standards。前提是 Human 已勾选启动授权补充的第三项。
 
 ## Exit criteria 编号
 
-- **M<k>.<i>**：DESIGN §19 中 milestone M<k> 的验收清单第 i 条，按出现顺序从 1 编号。按 2026-11-16 的 DESIGN：M0.1–M0.6、M1.1–M1.12、M2.1–M2.6、M3.1–M3.5；§19 改动时重数。
+- **M<k>.<i>** follows the order in DESIGN §19, with the current ranges M0.1–M0.6, M1.1–M1.12, M2.1–M2.6 and M3.1–M3.5.
+- **M1.13** follows M1.12 when the H45 acceptance item is appended to DESIGN §19 and requires evidence from the visible-region PDF export in the real browser.
 - **M<k>.C1 – C3**：每个 milestone phase 的三条共同 exit criteria，定义见 `LIFECYCLE.md` Roadmap（全部 check commands 通过；验收报告写明每条的结果与证据；补充决定已记入 §21 且保护区未被改动）。
 - §19 中写给 Human 做的真机检查条目：其 exit criterion 是 `docs/manual-checks.md` 中对应条目已写好、步骤可执行；真机检查本身由 Human 完成，不阻塞 phase（C1 范围内没有这类条目，M4、M7 才有）。
 - **R1.1 – R1.8**：phase `release` 的 exit criteria，见下。
@@ -31,8 +49,9 @@ The original FAIL remains recorded, no second routine Plan Review is requested, 
 | id | goal | exit criteria | depends | risk |
 |---|---|---|---|---|
 | M0 | 骨架：CLI 与 token、framed 传输、文件打开、Lanes 波形视图、播放、深色 dockview 布局、计算设备与 self-check | M0.1–M0.6、M0.C1–C3 | — | normal |
-| M1 | 频谱视口、Display 与 presets、Frequency Analysis、T-F 选框与框内试听、`vsr.dsp` 基础 API | M1.1–M1.12、M1.C1–C3 | M0 | high（DSP 标定与核心渲染决定后续所有 phase） |
-| M2 | tensor 载入与 `vsr.show` 推送、feature lane、mel、`vsr.plot`、`vsr skill install` | M2.1–M2.6、M2.C1–C3 | M1 | normal |
+| arch | Specify H45 visible-region workspace export and the D43 masked PCM boundaries. | A1, the independently accepted DESIGN delta integrated and verified by A2 in `phase-arch.md`. | M0 | normal |
+| M1 | 频谱视口、Display 与 presets、Frequency Analysis、T-F 选框与框内试听、`vsr.dsp` 基础 API、可见绘图区局部单页 PDF 导出、H54 工作台布局与视觉整改 | M1.1–M1.13、M1.C1–C3 | arch | high（DSP 标定、核心渲染与截图合成） |
+| M2 | tensor 载入与 `vsr.show` 推送、feature lane、mel、`vsr.plot`、`vsr skill install`，feature 与 mel 视图复用工作台 PDF 导出 | M2.1–M2.6、M2.C1–C3 | M1 | normal |
 | M3 | 编辑：波形编辑、T-F 选框删除 / 增益 / 提取、undo / redo、保存 | M3.1–M3.5、M3.C1–C3 | M1 | high（保存会改写用户文件） |
 | release | Cycle integration and delivery: full regression, drift audit, docs, §17 measurements, version 0.1.0, CHANGELOG, release acceptance, install smoke, annotated tag push and conditional GitHub Release under H34–H36. | R1.1–R1.8 | M0–M3 | normal |
 
@@ -51,7 +70,7 @@ The original FAIL remains recorded, no second routine Plan Review is requested, 
   A GitHub Release is created when local `gh` is installed and authenticated, otherwise only the tag is pushed and the Release page is reported NOT RUN with the reason in the release acceptance report.
   PyPI uploads remain outside this run's authorized delivery, and the existing Delivery prerequisite for the Human's whole-tree and commit-metadata public-repository scan remains in force.
   Release, tag, commit, push and conditional Release-page outcomes and report paths are recorded in worklog and STATUS, and the Controller sends the milestone/release heads-up through the human channel.
-- **R1.8** 保护区自基线以来未被改动；受跟踪文件的公共仓库扫描（整棵树，`LIFECYCLE.md` Checks）无命中。
+- **R1.8** Protected content matches the baseline subject to the independently accepted H45 additions in DESIGN §§1 and 19, and the whole-tree public-repository scan under LIFECYCLE Checks has no findings.
 
 ## Human 需求的归属（编号见 `human-inputs.md`）
 
@@ -79,13 +98,15 @@ The original FAIL remains recorded, no second routine Plan Review is requested, 
 | H34 standing authorization for automatic GitHub pushes. | Every milestone squash and session records commit under Integration Push, with release tag delivery in R1.7. |
 | H35 GitHub Release creation is authorized and PyPI upload is deferred. | Release R1.7, retaining the separate package-index authorization boundary. |
 | H36 use git until local `gh` is installed and authenticated. | Release R1.7 creates the Release page only when that prerequisite is available, otherwise records NOT RUN with its reason while pushing the tag. |
+| H45 visible-region single-page PDF export (B3 and D40). | `arch` A1 and M1.13, with M2 feature and mel reuse. |
+| H48 RIR coefficient and delay visualization (B4). | C3 M7 architecture and implementation. |
+| H54 workspace visual and layout feedback. | M1-T4 DESIGN §9 repairs and desktop/narrow screenshot review, with final workspace evidence in T8. |
 
 ## Budget 估计
 
 The M0 estimate is now explicitly 28 invocations, comprising 21 baseline seats and seven reserve seats, with Amendment A1 consuming one reserve invocation.
-The other four C1 phases retain their provisional estimate of about 25 invocations each, so the rolling cycle estimate is about 128 rather than the original 125, without adding to M0's reserve.
-The original approximate cycle estimate of 45 `sol` invocations remains provisional, while M0 explicitly assigns seven baseline `sol` seats and one reserve `sol` amendment seat.
-M0 has one `astra` Plan Review seat, and subsequent new phase plans follow the current CODEX Plan Reviewer assignment rather than the original assumption of no `astra` usage.
+The combined `arch` and M1 estimate is 60 invocations as detailed in `phase-M1.md`, comprising 10 for arch and 50 for M1, and the provisional estimates of about 25 each for M2, M3 and release put C1 at about 163 invocations.
+The M0 allocations and the CODEX review assignments remain recorded in the respective phase plans.
 There is no declared paid-compute or external cost and no host-contract budget cap, while each phase retains the applicable estimate-overrun gate.
 
 ## Human 介入点

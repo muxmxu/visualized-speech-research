@@ -4,6 +4,14 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 本文件进 git：Human 的原话以 H<n> 引用（原文在状态目录的 `human-inputs.md`），不写个人信息与机器信息（本机相关的内容写在状态目录的 `local.md`）。run 开始之前的设计与接入记录在本机状态目录的 `history/`，不在本仓库。
 
+## 2026-11-18 (C1 architecture and M1 planning)
+
+H45 adds a visible-workspace crop exported as a single-page raster PDF, and the M1 reconnaissance verified browser WebGL2 and a synthetic downloadable PDF that an independent reader opened.
+The independent architecture Plan Review found one integration-order defect, and the independent M1 Plan Review found four task-contract and verification defects.
+The Overall Planner completed the contract's single amendment before architecture dispatch, including D43's masked PCM selection bounds and H54's UI repair criteria.
+H54's UI consultation identified uneven control grouping, numeric alignment, view focus, and playhead color, with desktop and narrow-browser checks assigned to M1.
+H39's Codex skill merchant update was committed and pushed independently at version 1.5.1+codex after structure, script, and public-content checks.
+
 ## 2026-11-18 (M0 integration and acceptance)
 
 M0 was integrated from the five reviewed task branches, and the final main code commit is `99286649b43569fea9153c9a5ecd6753886f4377`.
