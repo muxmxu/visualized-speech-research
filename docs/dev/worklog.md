@@ -4,6 +4,15 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 本文件进 git：Human 的原话以 H<n> 引用（原文在状态目录的 `human-inputs.md`），不写个人信息与机器信息（本机相关的内容写在状态目录的 `local.md`）。run 开始之前的设计与接入记录在本机状态目录的 `history/`，不在本仓库。
 
+## 2026-11-17 (M0-T3 authenticated audio backend)
+
+**The T3 backend passed independent mechanical audit and semantic review, and its task branch was committed as `49303ebd4e479d459629613aa6ca206d0a9c27c5`.**
+
+- The first audit found missing WebSocket absent-token and HTTP 500 traceback assertions; the Worker added focused tests and audit-2 passed.
+- The first semantic review reproduced three defects: ignored CLI device override on a running server, non-finite lane metadata corrupting session responses, and NaN self-check metrics passing device selection.
+- Regression tests failed on the prior implementation with 14 failures; the Worker fixed the three behaviors and non-finite time-query validation at HTTP entry.
+- The final task suite passed 30 tests, Ruff and rule checks passed, audit-3 and review-2 passed, and an independent Git worker completed the task commit after `impl check`.
+
 ## 2026-11-17（M0-T2 framed 传输）
 
 **Python 与 TypeScript 的 framed codec 和双向互操作测试已通过独立审核，task 分支提交为 `40e9400829125267a1b079cd9704648291198caf`。**
