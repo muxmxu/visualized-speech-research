@@ -256,6 +256,20 @@ The two original FAIL verdicts remain historical, and any further semantic-revie
 - Verification: Auditor `luna(xhigh)` runs the waveform cancellation and playback tests, then Reviewer `sol(high)` checks sample alignment, observable measurements, cleanup, and test-hook exposure boundaries.
 - Acceptance mapping: M0.3, M0.4, and M0.C1.
 
+### Amendment A3 — Failed PCM loading cleanup and recovery
+
+This single T5 amendment follows the two consecutive semantic-review FAILs in `reports/M0-T5-review-1.md` and `reports/M0-T5-review-2.md` under the root ORCHESTRATION Review cap.
+The Worker must terminate failed loading, publish inactive transport, invalidate pending scheduling and release the failed attempt's sources and gains, without an older asynchronous failure stopping a newer play, while retaining visible HTTP-boundary error handling under DESIGN §7 and V1#1.
+In the existing `frontend/tests/e2e/m0-playback.spec.ts`, add a real-backend Chromium regression using generated audio, temporary VSR_HOME, random ports and the actual master Analyser: intercept exactly the first PCM response with HTTP 500 and the review-2 error body, then assert a visible error notification, inactive transport, a Play button and silent output.
+Restore normal PCM responses and assert that exactly one subsequent Play click starts audible master output with active transport and a Pause button, without an intervening Stop or second Play click.
+Also cover PCM failure during the directly related asynchronous lane/channel-triggered play restart, requiring the same visible error, inactive transport, resource cleanup and single-click recovery, with no unhandled rejection.
+Retain evidence that the new regressions fail before repair and pass afterward.
+Preserve review-1 P1 lane-removal and P2 live-channel regressions, the independently verified duration greater than twenty seconds, boundary and loop-wrap channel checks, long-loop cancellation, the twenty-second request limit, and every existing T5 acceptance command, assertion and threshold.
+The T5 write set and scope remain unchanged, with no added runtime dependency or configuration.
+Independent Mechanical Auditor `luna(xhigh)` (or the already declared fallback) must run the T5 acceptance commands and fixed-base rule check on the final tree, verify the new and retained regression evidence, write scope, protected paths and production test-hook exclusion, then pass before the final focused semantic review by an independent `sol(high)` invocation.
+That review must verify review-2 failure cleanup and recovery, including asynchronous restarts, and confirm review-1 P1/P2 remain closed on the covered final state, reusing only unchanged valid evidence.
+Both original FAIL verdicts remain historical, and any further semantic-review FAIL after A3 makes T5 BLOCKED, with no further rework, task amendment or task-level consultant.
+
 ## T6 — Final phase integration, measurement, and acceptance
 
 - Task type and role row: multi-module integration and final-tree verification, `terra(high)` integration Worker after its execution channel is resolved.
