@@ -17,6 +17,7 @@ Visualized! Speech Research（缩写 vsr）是面向 speech / acoustics 研究�
 
 v1 做：
 
+- 可见工作区图表的矩形裁剪，下载为单页栅格 PDF（§9.7）。
 - Audition 式的 UI 与交互（§9.6）：工具、快捷键、选区手柄、浮动工具条、右键菜单都按 Audition 的惯例。
 - Lanes 视图：单轨编辑与多轨合为同一个视图，多条 lane 共享时间轴。lane 可显示波形、STFT 频谱、mel 频谱、feature 图（任意 2D tensor）。
 - 频谱参数完全可调：n_fft、win_length、hop、window、频率轴刻度、dB 范围、colormap。同一条 lane 可以开多个 view（例如 wideband 与 narrowband 上下对照），各 view 的参数独立。
@@ -203,7 +204,7 @@ Session 与文件：
 
 - `/lanes/{id}/waveform?t0&t1&width&channel` → §8.2
 - `/lanes/{id}/spectrogram?t0&t1&width&height&f_lo&f_hi&yscale&channel&mode&n_fft&win_length&hop&window&window_param&n_mels&fmin&fmax&htk` → §8.3。feature lane 忽略 STFT 参数，按 §8.5 返回，此时 `f_lo / f_hi` 以行号表示。
-- `/lanes/{id}/pcm?t0&t1&sr[&channel][&f_lo&f_hi&n_fft&win_length&window&window_param]` → f32 [C, N]，播放用。后端用 `scipy.signal.resample_poly` 重采样到 `sr`（前端传 `AudioContext.sampleRate`），结果必须等于对整条 lane 重采样后再切出该区间（请求区间两侧多取滤波器长度的样本，算完再裁掉；T-F mask 同理在扩展区间上计算），保证分块拼接处没有瞬态；带 `channel` 时只返回该通道；带 f_lo / f_hi 时只返回 T-F 框内的声音（§15 的 mask，框外为 0）。前端每次最多取 20 s（§9.4）。
+- `/lanes/{id}/pcm?t0&t1&sr[&channel][&f_lo&f_hi&n_fft&win_length&window&window_param&selection_t0&selection_t1]` → framed f32 [C, N]，播放用。`t0,t1` 是项目时间线上要返回的半开分块区间，按 lane offset 与采样边界换算，并以请求的 `sr`（前端传 `AudioContext.sampleRate`）输出；前端每次最多取 20 s（§9.4）。普通 PCM 不带 mask 参数，后端以 `scipy.signal.resample_poly` 重采样，结果等于整条 lane 重采样后切出对应目标样本；带 `channel` 时只返回该通道。带 mask 时必须同时给出有限且严格递增的 `selection_t0,selection_t1`、频率边界 `f_lo,f_hi` 和画框 view 的 `n_fft,win_length,window,window_param`；前一对是项目时间线上完整 T-F 矩形的时间边界，并非分块边界。减去 lane offset 后，在 lane 的绝对 STFT 网格上按 §15 判断 mask 帧中心。试听保留矩形内的 T-F 内容，超出 §15 的过渡区域后 mask 权重为零，再经 ISTFT 与重采样。参考结果为对整条源 lane 在固定 `win_length // 4` hop 上施加一次 §15 试听 mask，再重采样一次，最后切出请求的目标样本；分块实现须与此一致，包括边缘与拼接处。`n_fft` 与 `win_length` 为正整数，`win_length ≤ n_fft` 且 `win_length // 4 ≥ 1`；window 为 §8.1 的 hann、hamming、blackman、blackmanharris、kaiser 或 gaussian（boxcar 只用于 §8.4 full）。`window_param` 必须为有限数：无参数窗传 0，kaiser 与 gaussian 传当前配置的参数，使用默认值时分别传 8.6 与 0.125；gaussian 的参数须大于 0。HTTP 入口对不完整的 mask 参数组、非有限值、非递增的时间 / 频率边界、无效 FFT / 窗长 / hop 组合、未知或不适用的 window 与无效窗参数返回 4xx 与本节错误 body。
 - `/lanes/{id}/data` → curve lane 为 framed（times + values），events lane 为 JSON
 - `GET /presets?sr=` → 按 §16 换算后的全部 preset 参数
 
@@ -337,7 +338,7 @@ Session 与文件：
 
 - 一个 AudioContext。按 Space 时，对每条可听 lane（非 mute，且没有 solo 或自身 solo）请求 `/pcm`：`sr` = `ctx.sampleRate`；C > 2 时带 `channel`（只播当前所选通道）；按 offset 换算起始样本与起播时刻。先取前 20 s，之后按 20 s 分块预取，用 `start(when)` 首尾相接。每块 → AudioBufferSourceNode → lane GainNode（gain / mute / solo 实时生效）→ master GainNode → destination。所有 lane 的第一块以同一个 `when` 起播。
 - 选区播放与循环：循环时各 lane 的 buffer 补零到选区长度，保证每圈对齐；选区长于 20 s 时按分块重复调度。
-- 有 T-F 选框时只对该 lane 请求带 f_lo / f_hi 与画框 view 的 STFT 参数（n_fft、win_length、window、window_param）的 `/pcm`，其他 lane 不发声。
+- 有 T-F 选框时只对该 lane 请求带 f_lo / f_hi、画框 view 的 STFT 参数（n_fft、win_length、window、window_param）与完整矩形 `selection_t0,selection_t1` 的 `/pcm`，其他 lane 不发声。每个分块（包括续读和循环）都原样携带完整矩形，每个分块的 `t1 − t0` 仍不超过 20 s。对于同一个 [0, 20) s 的首块，矩形止于 20 s 时该处是真正的 mask 边缘；矩形止于 40 s 时 20 s 是内部拼接处。两种情况均以整条源 lane 固定 hop 施加一次 §15 试听 mask、整条重采样一次后切片为参考，并按 §19 的误差检查。
 - 播放头 = 起播位置 + (ctx.currentTime − when)，requestAnimationFrame 绘制；播放头离开可视范围时整页翻页。
 - master 之后接一个 AnalyserNode。`window.__vsr_test`（只在 `--dev` 与测试构建中存在）暴露它的 RMS、播放头位置，以及每个 view 最近一次频谱响应，供 e2e 断言。
 
@@ -369,6 +370,12 @@ Human 的要求：UI 必须友好，交互可以直接照 Audition。
 - 破坏性操作都可 undo，不弹确认框；只有保存覆盖原文件、关闭未保存的 lane 时确认。
 - 每个按钮有 tooltip（名称 + 快捷键）；按 `?` 打开快捷键一览。右键菜单覆盖选区、lane header、空白区域三处，菜单项与快捷键一致。
 - 超过 300 ms 的操作显示进度或 spinner，不冻结 UI；错误用 notification，不用 alert。
+
+### 9.7 可见区域 PDF 导出
+
+工具栏提供截图入口；进入后在当前可见的 Lanes 绘图区域或 Frequency Analysis 绘图区域内拖出矩形，释放即确认并下载 PDF，Esc 取消，零面积拖动取消。截图框是独立状态，不改变播放、播放头、时间选区或 T-F 选框。可选范围为拖动起点所在绘图区域中当前可见的图表内容及其坐标轴、标签、colorbar 或图例，受该绘图区域、视口和各可见祖先的裁剪共同限制；拖动超出范围时截到可见边界，不滚动或纳入屏外内容。
+
+以确认时的可见物理像素为准，按画面层叠顺序组合当前绘制的波形、频谱、Frequency Analysis 的曲线、坐标轴、标签与所显示的图例、colorbar、选区、播放头及其他可见交互标注，并应用相同的滚动与容器裁剪；排除 dock 标签、面板控件、周围界面和截图手势框本身。WebGL 在其当前绘制缓冲仍可读取时复制到合成画布，再合成 Canvas2D 与可见文本 / 交互层，不发起 DSP 计算或数据请求，不使用屏幕捕获权限。以裁剪物理像素宽高作为栅格宽高，保持纵横比，不缩放或重排内容；单页 PDF 的页面尺寸以点为单位取同样数值，并以覆盖整页的单幅 JPEG 栅格编码。用浏览器原生画布、Blob 与下载能力生成 PDF，不增加后端路由、运行时依赖或用户音频写入。M2 的 mel 与 feature 图实现后复用同一导出路径。
 
 ## 10. Tensor 载入与推送
 
@@ -653,6 +660,7 @@ visualized-speech-research/
 - [ ] 测试：10 min、48 kHz mono、preset wideband 的整条计算，在独立子进程中测得峰值 RSS < 1.5 GiB；全视图请求按 §17 测量并记录
 - [ ] 测试：同一缓存键的两个并发请求只计算一次
 - [ ] 测试：`/pcm` 带 `sr` 时，相邻两个 20 s 分块拼接后与对整条 lane 调用 `scipy.signal.resample_poly` 的结果逐样本一致（误差 < 1e-6）；带 T-F mask 时同样检查拼接处
+- [ ] e2e：真实 Chromium 中框选可见工作区并下载单页栅格 PDF；按 §20 检查裁剪与页面尺寸、频谱、波形和可见标注的对应像素、排除的界面与手势、音频选区不变及导出触发的数据请求数为零，并用独立 PDF 阅读器打开生成文件。
 
 **M2 Tensor、推送、feature lane、mel、静态图**：§8.5、§10、mel 模式、`vsr.dsp.mel_db`、`vsr.plot`（spectrogram / compare / spectrum）、`vsr skill install`。
 
@@ -709,6 +717,8 @@ visualized-speech-research/
 - 前端：vitest 覆盖视口数学（时间 ↔ 像素、频率刻度映射）与 framed 解码；Playwright 使用其自带的 Chromium（`npx playwright install chromium` 取得，不设 `channel`），启动真实后端，覆盖各 milestone 的 e2e 项。平台没有可用的 Playwright Chromium 时，环境变量 `VSR_E2E_CHROMIUM` 给出该平台的 Chromium 可执行文件，`playwright.config.ts` 把它传给 `launchOptions.executablePath`；取值由 host contract 指定（见 `LIFECYCLE.md`），不写进仓库。
 - 测试一律设置临时 `VSR_HOME` 与随机端口；随机数固定 seed。
 - 平台差异：需要 mps、cuda 或录音 / 播放设备的 pytest，在运行平台上没有该设备时，用 `@pytest.mark.skipif(<没有该设备的条件>, reason="<原因>")` 跳过；e2e 不用条件 skip，依赖设备的检查放进 pytest（AGENTS.md「常见的写法，与规则下应该怎样写」一节）。真机录音与测量不进自动测试，见 `docs/manual-checks.md`。
+- PDF e2e：固定视口、设备像素比与滚动位置，等待渲染稳定并暂停播放，在截图手势之前独立取得 Chromium 的 viewport PNG 截图和 DOM 的绘图区域及其可见祖先裁剪矩形；分别测试 Lanes 和 Frequency Analysis 的裁剪，fixture 包含非整数 CSS 坐标、DPR 1.5 和部分滚出视口的内容。以远离设备像素舍入临界点的未对齐 CSS 坐标驱动拖动，至少一条边超出可见裁剪；从独立观察到的 pointerdown / pointerup 实际 client 坐标和测得的裁剪几何求交，直接计算一次半开物理像素边界：左上乘 DPR 后向内取 ceil，右下乘 DPR 后向内取 floor，不以预先舍入的裁剪边界驱动手势，也不读取导出实现的截图框或合成画布。特别覆盖 DPR 1.5 下原定 x = 100 / 1.5 而实际 pointerup.clientX = 66.66666412353516 时右边界为 floor(x × 1.5) = 99 的精度案例；不得假定其为 100。裁剪尺寸必须为正，PNG 对应区域、PDF 栅格与页面宽高均相同，页面为一页。
+- 自动像素路径只使用现有 Playwright / Node 与 Chromium：从下载 PDF 的交叉引用和对象长度读取唯一页面、MediaBox 和唯一 `DCTDecode` 图像流，验证图像宽高和覆盖页面的变换；在浏览器中以 `createImageBitmap` 解码该 JPEG 与独立 PNG，再用 Canvas2D `getImageData` 读取像素。选取空间分离、稳定且高对比的频谱、波形、可见标注及 Frequency Analysis 曲线、坐标轴、标签和所显示图例的内部区域，按相同裁剪相对坐标逐通道比较，JPEG 与 PNG 的 RGB 绝对差各 ≤ 20；区域远离抗锯齿边界并覆盖多个像素。在原始拖动矩形内、合格绘图边界之外放置醒目的 chrome 标记，验证裁剪后不包含该标记；另验证截图手势颜色未进入输出。同时断言原时间与 T-F 选区不变、导出动作没有触发数据请求。独立阅读器 smoke 将保存的 PDF 用启用内置 PDF viewer 的完整 Chromium 打开，确认单页可见且方向、内容正确并记录结果；该完整浏览器单独指定，不假定标准无 channel 或 executable 覆盖的 Playwright 无头启动器是完整 Chromium。此检查不以截图目视判断代替自动像素断言。
 - e2e 中只能靠肉眼判断的项（截图）不作为验收门槛，只供 Human 查看。
 - 检查命令见 AGENTS.md。
 
@@ -719,3 +729,6 @@ visualized-speech-research/
 D33（2026-11-17）：性能参考值按平台记录且不作为通过条件；其他平台首次实测建立本平台参考，以便发现后续回退。
 D36（2026-11-17）：framed 消息的 payload 起点从消息首字节按 8 字节对齐，多数组 offset 从 payload 起点计并按 8 字节对齐，以保证跨语言一致。
 D37（2026-11-17）：设备自检使用相同非零输入，逐项计算候选结果与 CPU 参考的二范数相对误差，并要求每项严格小于 1e-4。
+
+D40（2026-11-18）：按 H45 将可见工作区矩形裁剪的单页栅格 PDF 导出纳入 M1；复用已渲染图层并独立保存截图选区，以保留所见内容和现有音频交互。
+D43（2026-11-18）：masked PCM 将完整 T-F 矩形与分块边界分开传递；同一首块的 20 s 处可为选框边缘或长选框内部，按 §19 连续性验收及整条 lane mask 后重采样的参考消除歧义。
