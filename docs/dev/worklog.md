@@ -6,6 +6,12 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+The independent M1-T3 task plan fixes the absolute frame grid, bounded resampling support, whole-lane oracle, authenticated boundary cases, and four-path write set.
+D45 records the exterior half-cosine mask profile and the invalid effective-window boundary, with T8 assigned the DESIGN §21 entry.
+M1-T3 implementation was dispatched from reviewed M1-T2 commit `70d7f5c45e18b78777883bd1e6a2207704f6265f` in an isolated worktree.
+M1-T2's amended tree passed final independent audit 3 and semantic review 3 with 65 tests, two allowed device-skip REVIEW lines and a cold peak RSS below 1.5 GiB.
+The reviewed M1-T2 task branch commit is `70d7f5c45e18b78777883bd1e6a2207704f6265f`, and M1-T3 planning follows it.
+An independent warm-cache diagnostic observed 0.102 and 1.966 seconds for 256-row and 1024-row log viewport requests, respectively; T8 retains the formal browser performance measurement.
 M1-T2's first implementation passed 53 targeted tests and a 1.234 GiB cold peak-RSS gate, but semantic review 1 found four log, empty-frame, memory and internal exception defects.
 The Worker repaired those findings, and independent audit 2 passed 60 tests with a 1.235 GiB cold peak RSS and no internal exception REVIEW.
 Semantic review 2 reproduced two remaining log-boundary defects, so the T2 task planner added the sole task amendment for representable minimum frequency and unbracketed empty bands.
