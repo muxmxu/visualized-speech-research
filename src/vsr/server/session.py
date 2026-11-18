@@ -1,4 +1,4 @@
-"""In-memory audio lanes."""
+"""In-memory audio and feature lanes."""
 
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -25,11 +25,25 @@ class Lane:
     mute: bool = False
     solo: bool = False
 
+    frame_rate: float | None = None
+    frame_t0: float = 0.0
+    freq_axis: dict | None = None
+    value_scale: str | None = None
+
     def metadata(self) -> dict:
-        return {key: value for key, value in vars(self).items() if key != "data"} | {
-            "channels": self.data.shape[0],
-            "samples": self.data.shape[1],
-        }
+        fields = {"data", "frame_rate", "frame_t0", "freq_axis", "value_scale"}
+        meta = {key: value for key, value in vars(self).items() if key not in fields}
+        rows, frames = self.data.shape
+        if self.kind == "feature":
+            return meta | {
+                "rows": rows,
+                "frames": frames,
+                "frame_rate": self.frame_rate,
+                "frame_t0": self.frame_t0,
+                "freq_axis": self.freq_axis,
+                "value_scale": self.value_scale,
+            }
+        return meta | {"channels": rows, "samples": frames}
 
 
 @dataclass

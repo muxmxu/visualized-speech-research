@@ -76,7 +76,7 @@ describe('spec line', () => {
   it('uses the prescribed key order and identifies changed preset parameters', async () => {
     const { specLine } = await import('../src/state/spectralViews');
     const preset = { name: 'analysis', sr: 16000, n_fft: 512, win_length: 512, hop: 128, window: 'hann', yscale: 'linear' as const, f_min_hz: 0, f_max_hz: 8000, cmap: 'magma' };
-    const view = { id: 'v', laneId: 'l', preset: 'analysis', n_fft: 1024, win_length: 512, hop: 128, window: 'hann', window_param: 0, yscale: 'linear' as const, f_lo: 0, f_hi: 8000, cmap: 'heat', filter: 'LINEAR' as const, colorbar: true, range: 'auto80' as const, mode: 'W+S' as const, height: 160, split: 0.3 };
+    const view = { id: 'v', laneId: 'l', kind: 'audio' as const, transform: 'stft' as const, mel: {n_mels: 80, fmin: 0, fmax: 8000, htk: false}, preset: 'analysis', n_fft: 1024, win_length: 512, hop: 128, window: 'hann', window_param: 0, yscale: 'linear' as const, f_lo: 0, f_hi: 8000, cmap: 'heat', filter: 'LINEAR' as const, colorbar: true, range: 'auto80' as const, mode: 'W+S' as const, height: 160, split: 0.3 };
     expect(specLine(view, preset, 16000, [-90, -10])).toBe('vsr-spec v1 | preset=analysis | sr=16000 | window=hann | win=512 | hop=128 | n_fft=1024 | y=linear 0-8000Hz | db=[-90,-10] dBFS | cmap=heat | overrides=n_fft,cmap');
   });
 });

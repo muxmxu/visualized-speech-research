@@ -157,3 +157,20 @@ header input { padding:0 6px; color:var(--text); }
 header .tf-measurements { flex-wrap:wrap; min-width:0; max-width:100%; }
 .time-toolbar { position:absolute; top:2px; left:2px; z-index:4; pointer-events:auto; }
 .export-selection { position:fixed; z-index:10000; pointer-events:none; border:1px solid #4aa3ff; background:rgba(74,163,255,.15); }
+
+.tensor-multiple { display:grid; grid-template-columns:minmax(100px, 1fr) minmax(190px, 2fr); gap:12px; }
+.tensor-leaves { display:grid; align-content:start; gap:3px; max-height:320px; overflow:auto; }
+.tensor-leaves button { height:auto; min-height:34px; display:grid; text-align:left; padding:4px 6px; overflow-wrap:anywhere; }
+.tensor-leaves button[aria-pressed="true"] { border-color:var(--accent); }
+.tensor-leaves small, .tensor-shape { color:var(--text-dim); }
+.tensor-shape { margin:0 0 8px; font-variant-numeric:tabular-nums; }
+.tensor-form label { display:grid; grid-template-columns:minmax(100px, 1fr) minmax(90px, 1fr); align-items:center; gap:6px; margin:0 0 6px; }
+.tensor-form input:not([type="checkbox"]), .tensor-form select { width:100%; }
+.tensor-form input[type="checkbox"] { justify-self:start; }
+.tensor-actions { display:flex; justify-content:flex-end; gap:6px; margin-top:12px; }
+.tensor-form [role="alert"] { color:var(--record); }
+@media (max-width:420px) { .tensor-multiple { grid-template-columns:1fr; } .tensor-leaves { max-height:110px; } }
+
+.packet-axis { left:0; }
+.labeled-colorbar .colorbar { right:3px; bottom:13px; }
+.colorbar-unit { position:absolute; left:0; bottom:1px; width:100%; height:11px; color:var(--text-dim); font-size:8px; font-family:system-ui,sans-serif; }

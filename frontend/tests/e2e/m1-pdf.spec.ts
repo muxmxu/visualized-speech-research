@@ -373,3 +373,131 @@ test('export gestures starting on floating Play do not start playback, including
   await page.getByLabel('Export visible area to PDF').click(); start = await position(); await page.mouse.click(start.x, start.y); await page.waitForTimeout(300); expect(pcm).toEqual([]);
   await play.click(); await expect.poll(() => pcm.length).toBeGreaterThan(0); await expect(page.getByTitle('Play / pause')).toContainText('Pause');
 });
+
+test('exports mel and raw feature heatmaps with their visible axes and colorbars', async ({ page, server }, info) => {
+  const { execFile } = await import('node:child_process');
+  const { promisify } = await import('node:util');
+  const { dirname } = await import('node:path');
+  await page.goto(`${server.url}/?token=${server.token}`);
+  const open = () => page.request.post(`${server.url}/api/open`, { headers: { Authorization: `Bearer ${server.token}` }, data: { paths: [server.audio] } });
+  expect((await open()).ok()).toBe(true);
+  await expect(page.locator('.lane')).toHaveCount(1);
+  await promisify(execFile)('uv', ['run', '--no-sync', 'python', '-c',
+    'import numpy as np, vsr; a = np.repeat(np.array([0.25, 1, 0.5, 0.75], dtype=np.float32)[:,None], 100, axis=1); vsr.show(a, kind="feature", sr=8000, hop=80, freq_axis=dict(type="linear", f_max=3000), value_scale="raw", name="model values")'],
+    { cwd: '..', env: { ...process.env, VSR_HOME: dirname(server.audio) } });
+  await expect(page.locator('.lane')).toHaveCount(2);
+  expect((await open()).ok()).toBe(true);
+  await expect(page.locator('.lane')).toHaveCount(3);
+  const audio = page.locator('.lane').first();
+  const feature = page.locator('.lane').nth(1);
+  await audio.locator('.view-modes').getByRole('button', { name: 'S', exact: true }).click();
+  await page.keyboard.press('0');
+  await page.getByText('Display', { exact: true }).first().click();
+  const mel = page.waitForResponse(response => response.url().includes('/spectrogram?') && new URL(response.url()).searchParams.get('mode') === 'mel' && response.ok());
+  await page.getByLabel('Spectrogram mode').selectOption('mel'); await mel;
+  await page.getByLabel('Palette').selectOption('gray');
+  await expect(audio.locator('.packet-axis canvas')).toHaveAttribute('aria-label', /.+,.+,.+/);
+  const raw = feature.locator('.spectral-surface');
+  await expect(raw).toBeVisible();
+  await raw.click({ position: { x: 40, y: 50 } });
+  await page.getByLabel('Palette').selectOption('gray');
+  await page.getByLabel('Filter').selectOption('NEAREST');
+  await expect(feature.locator('.packet-axis canvas')).toHaveAttribute('aria-label', '0, 1k, 3k');
+  await expect(feature.locator('.colorbar-unit canvas')).toHaveAttribute('aria-label', 'value');
+  await expect(audio.locator('.colorbar-unit canvas')).toHaveAttribute('aria-label', 'dBFS');
+  await page.locator('.lane-list').evaluate(element => {
+    (element as HTMLElement).style.transform = 'translate(0.35px, 0.3px)';
+    element.scrollTop = 23;
+  });
+  const selected = await raw.boundingBox(); if (!selected) throw new Error('Feature surface missing');
+  await page.mouse.move(selected.x + 80, selected.y + 65); await page.mouse.down();
+  await page.mouse.move(selected.x + 195, selected.y + 65); await page.mouse.up();
+  await page.mouse.move(5, 12);
+  await page.waitForTimeout(500);
+  const before = await Promise.all(['Start', 'End', 'Duration'].map(name => page.getByLabel(name, { exact: true }).inputValue()));
+  const playhead = await page.locator('.measurements > span').textContent();
+  const geometry = await page.locator('.lane-list').evaluate(element => {
+    const rect = (target: Element) => {
+      const { left, top, right, bottom } = target.getBoundingClientRect();
+      return { left, top, right, bottom };
+    };
+    const rows = Array.from(element.querySelectorAll('.lane')).slice(0, 2).map(row => ({
+      surface: rect(row.querySelector('.spectral-surface') as Element),
+      axis: rect(row.querySelector('.frequency-axis') as Element),
+      bar: rect(row.querySelector('.colorbar') as Element),
+    }));
+    const list = rect(element);
+    const root = element.closest('.lanes') as HTMLElement;
+    const drawing = rect(root);
+    let bottom = Math.min(innerHeight, list.bottom, drawing.bottom);
+    for (let parent = root.parentElement; parent; parent = parent.parentElement) {
+      const style = getComputedStyle(parent);
+      if (/(auto|scroll|hidden|clip)/.test(`${style.overflowX} ${style.overflowY}`)) bottom = Math.min(bottom, rect(parent).bottom - parseFloat(style.borderBottomWidth));
+    }
+    return { rows, list, bottom, left: Math.max(rows[0].axis.left, list.left, drawing.left), right: Math.min(rows[0].bar.right + 3, list.right, drawing.right) };
+  });
+  const reference = await page.screenshot({ path: info.outputPath('mel-feature-reference.png') });
+  const requests: string[] = [];
+  page.on('request', request => { if (/\/(waveform|spectrogram|spectrum|pcm)([/?]|$)/.test(request.url())) requests.push(request.url()); });
+  await page.evaluate(() => {
+    const points: number[][] = []; Object.assign(window, { __tensorPdfPoints: points });
+    window.addEventListener('pointerdown', event => points.push([event.clientX, event.clientY]), true);
+    window.addEventListener('pointerup', event => points.push([event.clientX, event.clientY]), true);
+  });
+  await page.getByLabel('Export visible area to PDF').click();
+  await page.evaluate(() => { (window as unknown as { __tensorPdfPoints: number[][] }).__tensorPdfPoints.length = 0; });
+  const downloaded = page.waitForEvent('download');
+  await page.mouse.move(geometry.left + 0.95, geometry.list.top + 0.9); await page.mouse.down();
+  await page.mouse.move(geometry.right + 12.25, geometry.bottom + 10.25); await page.mouse.up();
+  const file = await downloaded;
+  const path = info.outputPath('mel-feature.pdf'); await file.saveAs(path);
+  await page.waitForTimeout(300);
+  expect(requests).toEqual([]);
+  expect(await Promise.all(['Start', 'End', 'Duration'].map(name => page.getByLabel(name, { exact: true }).inputValue()))).toEqual(before);
+  await expect(page.locator('.measurements > span')).toHaveText(playhead as string);
+  const points = await page.evaluate(() => (window as unknown as { __tensorPdfPoints: number[][] }).__tensorPdfPoints);
+  expect(points).toHaveLength(2);
+  expect(points[1][0]).toBeGreaterThan(geometry.right);
+  expect(points[1][1]).toBeGreaterThan(geometry.bottom);
+  const dpr = 1.5;
+  const left = Math.ceil(points[0][0] * dpr);
+  const top = Math.ceil(points[0][1] * dpr);
+  const right = Math.floor(geometry.right * dpr);
+  const bottom = Math.floor(geometry.bottom * dpr);
+  const jpeg = verifyPdf(await readFile(path), right - left, bottom - top);
+  const compared = await page.evaluate(async ({ png, jpg, rows, left, top, dpr }) => {
+    const decode = async (source: string, type: string) => createImageBitmap(new Blob([Uint8Array.from(atob(source), char => char.charCodeAt(0))], { type }));
+    const original = await decode(png, 'image/png');
+    const output = await decode(jpg, 'image/jpeg');
+    const canvas = document.createElement('canvas'); canvas.width = original.width; canvas.height = original.height;
+    const ctx = canvas.getContext('2d') as CanvasRenderingContext2D;
+    ctx.drawImage(original, 0, 0); const a = ctx.getImageData(left, top, output.width, output.height).data;
+    canvas.width = output.width; canvas.height = output.height;
+    ctx.drawImage(output, 0, 0); const b = ctx.getImageData(0, 0, output.width, output.height).data;
+    type Area = { left: number; top: number; right: number; bottom: number };
+    function samples(area: Area, accepts: (r: number, g: number, b: number) => boolean) {
+      const values: { x: number; y: number; diff: number }[] = [];
+      for (let y = Math.max(2, Math.ceil(area.top * dpr - top) + 2); y < Math.min(output.height - 2, Math.floor(area.bottom * dpr - top) - 2); y++) {
+        for (let x = Math.max(2, Math.ceil(area.left * dpr - left) + 2); x < Math.min(output.width - 2, Math.floor(area.right * dpr - left) - 2); x++) {
+          if (values.some(point => Math.abs(point.x - x) < 6 && Math.abs(point.y - y) < 5)) continue;
+          const pixels = [0, 1].map(shift => (y * output.width + x + shift) * 4);
+          if (!pixels.every(i => accepts(a[i], a[i + 1], a[i + 2]))) continue;
+          const diff = Math.max(...pixels.flatMap(i => [0, 1, 2].map(channel => Math.abs(a[i + channel] - b[i + channel]))));
+          values.push({ x, y, diff });
+          if (values.length === 8) return values;
+        }
+      }
+      return values;
+    }
+    return rows.map(({ surface, axis, bar }) => ({
+      heatmap: samples({ ...surface, left: surface.left + 220, right: surface.left + 500 }, (r, g, b) => r > 160 && Math.max(r, g, b) - Math.min(r, g, b) < 5),
+      labels: samples(axis, (r, g, b) => r >= 110 && g >= 115 && b >= 120 && b >= r + 6),
+      colorbar: samples(bar, (r, g, b) => r > 45 && r < 220 && Math.max(r, g, b) - Math.min(r, g, b) < 5),
+    }));
+  }, { png: reference.toString('base64'), jpg: jpeg.toString('base64'), rows: geometry.rows, left, top, dpr });
+  await writeFile(info.outputPath('mel-feature-observations.json'), JSON.stringify({ geometry, points, left, top, right, bottom, compared }, null, 2));
+  for (const [row, regions] of compared.entries()) for (const [region, values] of Object.entries(regions)) {
+    expect(values.length, `row ${row} ${region}`).toBeGreaterThanOrEqual(2);
+    for (const value of values) expect(value.diff, `row ${row} ${region} ${JSON.stringify(value)}`).toBeLessThanOrEqual(20);
+  }
+});

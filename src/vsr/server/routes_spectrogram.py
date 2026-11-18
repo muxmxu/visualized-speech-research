@@ -7,19 +7,63 @@ from fractions import Fraction
 from typing import Literal
 
 import numpy as np
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import Response
-from pydantic import FiniteFloat
+from pydantic import BaseModel, FiniteFloat, ValidationError
 
 from vsr.api import compute_device
-from vsr.dsp.stft import stft_chunk
+from vsr.dsp.mel import mel_center_frequencies, mel_chunk, mel_filterbank
+from vsr.dsp.stft import _window_tensor, centered_frame_count, stft_chunk
 from vsr.frame import encode_frame
+from vsr.io.tensors import feature_scale
+
+
+class AudioSpectrogram(BaseModel):
+    height: int
+    yscale: Literal["linear", "log"]
+    channel: int
+    mode: Literal["stft", "mel"]
+    n_fft: int
+    win_length: int
+    hop: int
+    window: Literal["hann", "hamming", "blackman", "blackmanharris", "kaiser", "gaussian"]
+    window_param: FiniteFloat
+
+
+class MelSpectrogram(AudioSpectrogram):
+    n_mels: int
+    fmin: FiniteFloat
+    fmax: FiniteFloat
+    htk: bool
 
 
 def build_entry(data, n_fft, win_length, hop, window, window_param, device, budget):
+    def read(start, end):
+        return stft_chunk(data, start, end, n_fft, win_length, hop, window, window_param, device)
+
+    frames = centered_frame_count(data.shape[-1], n_fft, hop)
     bins = n_fft // 2 + 1
-    frames = 1 + (data.shape[-1] + 2 * (n_fft // 2) - n_fft) // hop
-    chunk = (8 * 2**20) // (2 * bins)
+    return build_pyramid(bins, frames, budget, chunk_width(bins), read)
+
+
+def mel_reader(data, sr, params, device):
+    window = _window_tensor(params.window, params.win_length, params.window_param, device)
+    filters = mel_filterbank(
+        sr, params.n_fft, params.n_mels, params.fmin, params.fmax, params.htk, device
+    )
+
+    def read(start, end):
+        return mel_chunk(data, start, end, params.n_fft, params.hop, window, filters).numpy()
+
+    return read
+
+
+def chunk_width(rows):
+    return (8 * 2**20) // (2 * rows)
+
+
+def build_pyramid(bins, frames, budget, chunk, read):
     size = 2 * bins * (frames + (frames + 7) // 8 + (frames + 63) // 64) + 8
     full = size <= budget // 2
     base = np.empty((bins, frames), dtype=np.float16) if full else None
@@ -29,7 +73,7 @@ def build_entry(data, n_fft, win_length, hop, window, window_param, device, budg
     maximum = None
     for start in range(0, frames, chunk):
         end = min(frames, start + chunk)
-        values = stft_chunk(data, start, end, n_fft, win_length, hop, window, window_param, device)
+        values = read(start, end)
         chunk_max = float(values.max())
         maximum = chunk_max if maximum is None else max(maximum, chunk_max)
         if full:
@@ -102,29 +146,137 @@ def log_bin_boundary(freqs, lower, upper, numerator, denominator):
     return start
 
 
+def time_groups(centers, t0, t1, width):
+    selected = np.flatnonzero((centers >= t0) & (centers <= t1))
+    count = len(selected)
+    p = 1 if count <= width else 2 ** math.ceil(math.log2(count / width))
+    first = int(selected[0]) // p if count else 0
+    last = int(selected[-1]) // p + 1 if count else 0
+    return first, last, p
+
+
+def reduce_group(start, end, cap, read):
+    first_end = min(end, start + cap)
+    maximum = read(start, first_end).astype(np.float16).max(axis=1)
+    for k in range(first_end, end, cap):
+        current = read(k, min(end, k + cap)).astype(np.float16).max(axis=1)
+        np.maximum(maximum, current, out=maximum)
+    return maximum
+
+
+def pool_audio(entry, bins, first, last, p, reduce_uncached):
+    base, p8, p64, _, frames = entry
+    pooled = np.empty((bins, last - first), dtype=np.float16)
+    layer, stride = (p64, 64) if p >= 64 else ((p8, 8) if p >= 8 else (base, 1))
+    for j in range(last - first):
+        start, end = (first + j) * p, min((first + j + 1) * p, frames)
+        if base is None:
+            pooled[:, j] = reduce_uncached(start, end)
+        else:
+            pooled[:, j] = layer[:, start // stride : (end + stride - 1) // stride].max(axis=1)
+    return pooled
+
+
+def first_group_center(first, p, frames):
+    start = first * p
+    end = min(start + p, frames)
+    return (start + end - 1) / 2
+
+
+def spectral_response(result, col_t0, col_dt, row_freqs, f_axis, lane_max):
+    rows, cols = result.shape
+    meta = {
+        "col_t0": col_t0,
+        "col_dt": col_dt,
+        "cols": cols,
+        "rows": rows,
+        "row_freqs": row_freqs,
+        "f_axis": f_axis,
+        "view_db_max": float(result.max()) if result.size else None,
+        "lane_db_max": lane_max,
+    }
+    return Response(
+        encode_frame(result, meta),
+        media_type="application/octet-stream",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
+def feature_view(data, rate, origin, axis, scale, t0, t1, width, f_lo, f_hi):
+    if f_lo < 0 or f_hi < f_lo or not f_lo.is_integer() or not f_hi.is_integer():
+        raise HTTPException(422, "Feature frequency limits must be nonnegative integer row indices")
+    rows, frames = data.shape
+    first_row, end_row = min(int(f_lo), rows), min(int(f_hi) + 1, rows)
+    selection = data[first_row:end_row]
+    centers = origin + np.arange(frames, dtype=np.float64) / rate
+    first, last, p = time_groups(centers, t0, t1, width)
+    pooled = np.empty((len(selection), last - first), dtype=np.float32)
+    for j, group in enumerate(range(first, last)):
+        pooled[:, j] = selection[:, group * p : (group + 1) * p].max(axis=1)
+    row_indices = np.arange(first_row, end_row)
+    match axis["type"]:
+        case "linear":
+            labels = row_indices / max(1, rows - 1) * axis["f_max"]
+        case "mel":
+            labels = mel_center_frequencies(rows, axis["fmin"], axis["fmax"], axis["htk"]).numpy()[
+                first_row:end_row
+            ]
+        case "index":
+            labels = row_indices
+    result = pooled if scale == "raw" else feature_scale(pooled, scale).astype(np.float16)
+    return spectral_response(
+        result,
+        origin + first_group_center(first, p, frames) / rate,
+        p / rate,
+        labels.tolist(),
+        {"scale": axis["type"], "lo": int(f_lo), "hi": int(f_hi)},
+        float(feature_scale(data.max(), scale)),
+    )
+
+
 def register_spectrogram(app, session, find, heavy, budget):
     @app.get("/api/lanes/{lane_id}/spectrogram")
     def spectrogram(
+        request: Request,
         lane_id: str,
         t0: FiniteFloat,
         t1: FiniteFloat,
         width: int,
-        height: int,
         f_lo: FiniteFloat,
         f_hi: FiniteFloat,
-        yscale: Literal["linear", "log"],
-        channel: int,
-        mode: Literal["stft"],
-        n_fft: int,
-        win_length: int,
-        hop: int,
-        window: Literal["hann", "hamming", "blackman", "blackmanharris", "kaiser", "gaussian"],
-        window_param: FiniteFloat,
     ):
+        if t1 <= t0 or width <= 0:
+            raise HTTPException(422, "Invalid spectrogram parameters")
+        with session.lock:
+            lane = find(lane_id)
+            kind = lane.kind
+            data, sr, offset, version = lane.data, lane.sr, lane.offset, lane.version
+            rate, frame_t0, axis, scale = (
+                lane.frame_rate,
+                lane.frame_t0,
+                lane.freq_axis,
+                lane.value_scale,
+            )
+        if kind == "feature":
+            return feature_view(
+                data.numpy(), rate, offset + frame_t0, axis, scale, t0, t1, width, f_lo, f_hi
+            )
+
+        raw = dict(request.query_params)
+        is_mel = raw.get("mode") == "mel"
+        try:
+            params = (MelSpectrogram if is_mel else AudioSpectrogram).model_validate(raw)
+        except ValidationError as exc:
+            errors = [
+                error | {"loc": ("query", *error["loc"])} for error in exc.errors(include_url=False)
+            ]
+            raise RequestValidationError(errors) from exc
+        n_fft, win_length, hop = params.n_fft, params.win_length, params.hop
+        window, window_param = params.window, params.window_param
+        yscale, height, channel = params.yscale, params.height, params.channel
+        bins = params.n_mels if is_mel else n_fft // 2 + 1
         if (
-            t1 <= t0
-            or width <= 0
-            or height <= 0
+            height <= 0
             or f_hi <= f_lo
             or f_lo < 0
             or n_fft <= 0
@@ -133,62 +285,74 @@ def register_spectrogram(app, session, find, heavy, budget):
             or hop <= 0
             or channel < 0
             or (window == "gaussian" and window_param <= 0)
-            or 2 * (n_fft // 2 + 1) > 8 * 2**20
+            or bins <= 0
+            or chunk_width(max(bins, n_fft // 2 + 1)) == 0
         ):
             raise HTTPException(422, "Invalid spectrogram parameters")
-        with session.lock:
-            lane = find(lane_id)
-            if channel >= lane.data.shape[0]:
-                raise HTTPException(422, "Invalid channel")
-            data, sr, offset, version = lane.data[channel], lane.sr, lane.offset, lane.version
-        if f_hi > sr / 2 or (yscale == "log" and f_lo < max(20.0, sr / n_fft)):
+        if channel >= data.shape[0]:
+            raise HTTPException(422, "Invalid channel")
+        data = data[channel]
+        if f_hi > sr / 2 or (not is_mel and yscale == "log" and f_lo < max(20.0, sr / n_fft)):
             raise HTTPException(422, "Invalid frequency range")
-        key = (lane_id, version, channel, mode, n_fft, win_length, hop, window, window_param)
+        if is_mel and not 0 <= params.fmin < params.fmax <= sr / 2:
+            raise HTTPException(422, "Invalid mel frequency limits")
+        key = (lane_id, version, channel, params.mode, n_fft, win_length, hop, window, window_param)
+        if is_mel:
+            key += (params.n_mels, params.fmin, params.fmax, params.htk)
+
+        cap = chunk_width(max(bins, n_fft // 2 + 1))
 
         def build(device):
             with heavy:
+                if is_mel:
+                    frames = centered_frame_count(data.shape[-1], n_fft, hop)
+                    return build_pyramid(
+                        bins, frames, budget, cap, mel_reader(data, sr, params, device)
+                    )
                 return build_entry(
                     data, n_fft, win_length, hop, window, window_param, device, budget
                 )
 
         entry, device = cached_entry(session, key, build, budget)
-        base, p8, p64, lane_max, frames = entry
+        base, _, _, lane_max, frames = entry
         centers = np.arange(frames, dtype=np.float64) * hop / sr + offset
-        selected = np.flatnonzero((centers >= t0) & (centers <= t1))
-        count = len(selected)
-        p = 1 if count <= width else 2 ** math.ceil(math.log2(count / width))
-        first = int(selected[0]) // p if count else 0
-        last = int(selected[-1]) // p + 1 if count else 0
+        first, last, p = time_groups(centers, t0, t1, width)
         cols = last - first
-        bins = n_fft // 2 + 1
-        pooled = np.empty((bins, cols), dtype=np.float16)
-        layer, stride = (p64, 64) if p >= 64 else ((p8, 8) if p >= 8 else (base, 1))
-        for j in range(cols):
-            start, end = (first + j) * p, min((first + j + 1) * p, frames)
-            if base is None:
-                maximum = None
-                cap = (8 * 2**20) // (2 * bins)
-                with heavy:
-                    for k in range(start, end, cap):
-                        part = stft_chunk(
-                            data,
-                            k,
-                            min(end, k + cap),
-                            n_fft,
-                            win_length,
-                            hop,
-                            window,
-                            window_param,
-                            device,
-                        ).astype(np.float16)
-                        current = part.max(axis=1)
-                        if maximum is None:
-                            maximum = current
-                        else:
-                            np.maximum(maximum, current, out=maximum)
-                pooled[:, j] = maximum
-            else:
-                pooled[:, j] = layer[:, start // stride : (end + stride - 1) // stride].max(axis=1)
+
+        def read_stft(start, end):
+            return stft_chunk(
+                data, start, end, n_fft, win_length, hop, window, window_param, device
+            )
+
+        def reduce_stft(start, end):
+            with heavy:
+                return reduce_group(start, end, cap, read_stft)
+
+        if is_mel and base is None and cols:
+            with heavy:
+                read = mel_reader(data, sr, params, device)
+
+                def reduce_mel(start, end):
+                    return reduce_group(start, end, cap, read)
+
+                pooled = pool_audio(entry, bins, first, last, p, reduce_mel)
+        else:
+            pooled = pool_audio(entry, bins, first, last, p, reduce_stft)
+
+        col_dt = p * hop / sr
+        if is_mel:
+            center = first_group_center(first, p, frames) if cols else 0
+            freqs = mel_center_frequencies(bins, params.fmin, params.fmax, params.htk).numpy()
+            indices = (freqs >= f_lo) & (freqs <= f_hi)
+            return spectral_response(
+                pooled[indices],
+                offset + center * hop / sr,
+                col_dt,
+                freqs[indices].tolist(),
+                {"scale": "mel", "lo": f_lo, "hi": f_hi},
+                lane_max,
+            )
+        col_t0 = offset + (first * p + (p - 1) / 2) * hop / sr
         freqs = np.arange(bins, dtype=np.float64) * sr / n_fft
         if yscale == "linear":
             indices = np.flatnonzero((freqs >= f_lo) & (freqs <= f_hi))
@@ -240,18 +404,6 @@ def register_spectrogram(app, session, find, heavy, budget):
                         + pooled[idx].astype(np.float32) * weight
                     )
         result = np.asarray(rows, dtype=np.float16).reshape(len(rows), cols)
-        meta = {
-            "col_t0": offset + (first * p + (p - 1) / 2) * hop / sr,
-            "col_dt": p * hop / sr,
-            "cols": cols,
-            "rows": len(rows),
-            "row_freqs": row_freqs,
-            "f_axis": {"scale": yscale, "lo": lo, "hi": hi},
-            "view_db_max": float(result.max()) if result.size else None,
-            "lane_db_max": lane_max,
-        }
-        return Response(
-            encode_frame(result, meta),
-            media_type="application/octet-stream",
-            headers={"Cache-Control": "no-store"},
+        return spectral_response(
+            result, col_t0, col_dt, row_freqs, {"scale": yscale, "lo": lo, "hi": hi}, lane_max
         )

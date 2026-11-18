@@ -1,6 +1,31 @@
-export interface Lane {
-  id: string; name: string; source: string; sr: number; channels: number; samples: number;
+interface LaneMetadata {
+  id: string; name: string; source: string; sr: number;
   offset: number; gain_db: number; mute: boolean; solo: boolean; version: number;
 }
+
+export interface Lane extends LaneMetadata {
+  kind: 'audio'; channels: number; samples: number;
+}
+
+export type MelSettings = { n_mels: number; fmin: number; fmax: number; htk: boolean };
+export type FrequencyAxis = { type: 'index' } | { type: 'linear'; f_max: number } | ({ type: 'mel' } & MelSettings);
+export type ValueScale = 'magnitude' | 'power' | 'db' | 'ln_magnitude' | 'log10_magnitude' | 'raw';
+export interface FeatureLane extends LaneMetadata {
+  kind: 'feature'; rows: number; frames: number; frame_rate: number; frame_t0: number;
+  freq_axis: FrequencyAxis; value_scale: ValueScale;
+}
+export type SessionLane = Lane | FeatureLane;
+export function laneDuration(lane: SessionLane): number {
+  return lane.kind === 'audio' ? lane.samples / lane.sr : lane.frame_t0 + lane.frames / lane.frame_rate;
+}
+
+export type AudioLayout = '[N]' | '[C,N]' | '[N,C]' | '[B,N]' | '[B,C,N]';
+export type FeatureAxes = '[F,T]' | '[T,F]' | '[B,F,T]' | '[B,T,F]';
+export type Interpretation = { kind: 'audio'; layout: AudioLayout; sr: number } |
+  { kind: 'feature'; axes: FeatureAxes; sr: number; hop: number; freq_axis: FrequencyAxis; value_scale: ValueScale };
+export interface TensorLeaf { key_path: unknown[]; shape: number[]; dtype: string }
+export interface TensorIntake { needs_interpretation: true; path: string; tree: TensorLeaf[] }
+export type OpenResult = TensorIntake | { lanes: SessionLane[] };
+
 export interface Settings { compute_device: string; available_devices: string[]; self_check: Record<string, number> | null; reason: string | null }
 export interface Directory { path: string; entries: { name: string; is_dir: boolean; size: number; mtime: number }[] }

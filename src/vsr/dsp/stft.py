@@ -32,12 +32,16 @@ def window_tensor(window, win_length, window_param):
     return _window_tensor(window, win_length, window_param, compute_device())
 
 
+def _calibrated_amplitude(transform, window):
+    return transform.abs() * (2 / window.sum())
+
+
 def _calibrated_db(transform, window):
-    amplitude = transform.abs() * (2 / window.sum())
+    amplitude = _calibrated_amplitude(transform, window)
     return 20 * torch.log10(torch.clamp(amplitude, min=1e-10))  # DESIGN §8.1
 
 
-def stft_db(x, sr, **params) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+def _stft_parameters(sr, params):
     defaults = resolve_preset("analysis", sr)
     n_fft = params.get("n_fft", defaults["n_fft"])
     win_length = params.get("win_length", n_fft)
@@ -45,8 +49,13 @@ def stft_db(x, sr, **params) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     window = params.get("window", "hann")
     if window not in {"hann", "hamming", "blackman", "blackmanharris", "kaiser", "gaussian"}:
         raise ValueError("Invalid STFT window")
+    return n_fft, win_length, hop, window, params.get("window_param")
+
+
+def stft_db(x, sr, **params) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    n_fft, win_length, hop, window, window_param = _stft_parameters(sr, params)
     x = input_tensor(x)
-    w = window_tensor(window, win_length, params.get("window_param"))
+    w = window_tensor(window, win_length, window_param)
     transform = torch.stft(
         x,
         n_fft,
@@ -63,21 +72,29 @@ def stft_db(x, sr, **params) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     return db.cpu(), times.cpu(), freqs.cpu()
 
 
-def stft_chunk(data, start, end, n_fft, win_length, hop, window, window_param, device):
-    """Calculate absolute centered frames from a bounded source slice."""
+def centered_frame_count(samples, n_fft, hop):
+    return 1 + (samples + 2 * (n_fft // 2) - n_fft) // hop
+
+
+def _centered_transform_chunk(data, start, end, n_fft, hop, window):
+    """Calculate centered frames on the absolute grid using only their sample support."""
     q = n_fft // 2
     left = start * hop - q
     right = (end - 1) * hop - q + n_fft
-    source = data[max(0, left) : min(data.shape[-1], right)].to(device=device)
+    source = data[..., max(0, left) : min(data.shape[-1], right)].to(device=window.device)
     source = torch.nn.functional.pad(source, (max(0, -left), max(0, right - data.shape[-1])))
-    w = _window_tensor(window, win_length, window_param, device)
-    transform = torch.stft(
+    return torch.stft(
         source,
         n_fft,
         hop_length=hop,
-        win_length=win_length,
-        window=w,
+        win_length=window.numel(),
+        window=window,
         center=False,
         return_complex=True,
     )
+
+
+def stft_chunk(data, start, end, n_fft, win_length, hop, window, window_param, device):
+    w = _window_tensor(window, win_length, window_param, device)
+    transform = _centered_transform_chunk(data, start, end, n_fft, hop, w)
     return _calibrated_db(transform, w).cpu().numpy()

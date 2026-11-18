@@ -1,17 +1,25 @@
 """Authenticated local HTTP and WebSocket application."""
 
 import math
+import re
+import secrets
 import traceback
+from asyncio import TimerHandle, get_running_loop
+from contextlib import asynccontextmanager
+from dataclasses import dataclass
 from pathlib import Path
+from pickle import UnpicklingError
 from threading import BoundedSemaphore
+from time import monotonic
 from typing import Literal
 from uuid import uuid4
+from zipfile import BadZipFile
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
-from pydantic import BaseModel, Field, FiniteFloat, model_validator
+from pydantic import BaseModel, Field, FiniteFloat, TypeAdapter, model_validator
 from scipy.signal import get_window, resample_poly
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -21,18 +29,54 @@ from vsr.device import select_device
 from vsr.dsp.edit import masked_interval
 from vsr.dsp.spectrum import NoEligibleFrames, spectrum
 from vsr.dsp.waveform import waveform
-from vsr.frame import encode_frame
+from vsr.frame import decode_frame, encode_frame
 from vsr.io.audio import AUDIO_EXTENSIONS, read_audio
+from vsr.io.tensors import (
+    TENSOR_EXTENSIONS,
+    Interpretation,
+    KeyPath,
+    PositiveInt,
+    TensorInputError,
+    interpret_tensor,
+    load_tensors,
+    tensor_leaf,
+    tensor_tree,
+)
 from vsr.presets import preset_definitions, resolve_preset
 from vsr.server.routes_spectrogram import register_spectrogram
 from vsr.server.session import Lane, Session
 from vsr.server.ws import Connections
 
 _heavy_compute = BoundedSemaphore(1)
+_interpretation = TypeAdapter(Interpretation)
+OPEN_LAUNCH_HEADER = "X-VSR-Open-Launch"
+_launch_id_pattern = re.compile(r"[A-Za-z0-9_-]{43}")
+_launch_lifetime = 300
+_launch_limit = 64
+
+
+@dataclass
+class PendingOpen:
+    paths: list[Path]
+    deadline: float
+    timer: TimerHandle | None = None
 
 
 class OpenRequest(BaseModel):
     paths: list[str]
+
+
+class OpenTensorRequest(BaseModel):
+    path: str
+    key_path: KeyPath
+    interpretation: Interpretation
+
+
+class PushHeader(BaseModel):
+    name: str
+    kind: Literal["audio", "feature"]
+    sr: PositiveInt
+    interpretation: dict
 
 
 class LanePatch(BaseModel):
@@ -76,16 +120,65 @@ class SpectrumRequest(BaseModel):
         return self
 
 
-def create_app(token: str, device: str = "auto", paths: list[str] | None = None) -> FastAPI:
-    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
+def audio_lane(path: Path, upload_name: str | None = None) -> Lane:
+    data, sr = read_audio(path)
+    return Lane(
+        name=upload_name or path.name,
+        source=f"upload:{upload_name}" if upload_name else str(path),
+        data=data,
+        sr=sr,
+    )
+
+
+def create_app(
+    token: str,
+    device: str = "auto",
+    paths: list[str] | None = None,
+    *,
+    launch_id: str | None = None,
+) -> FastAPI:
+    pending_opens: dict[str, PendingOpen] = {}
+
+    def register_open(identifier: str, raw_paths: list[str]) -> PendingOpen:
+        paths = [Path(raw) for raw in raw_paths]
+        if not all(path.is_absolute() for path in paths) or not any(
+            path.suffix.lower() in TENSOR_EXTENSIONS for path in paths
+        ):
+            raise HTTPException(422, "A launch requires absolute paths including a tensor file")
+        if len(pending_opens) >= _launch_limit:
+            raise HTTPException(429, "Too many pending opens")
+        launch = PendingOpen(paths, monotonic() + _launch_lifetime)
+        pending_opens[identifier] = launch
+        return launch
+
+    def arm_open(identifier: str, launch: PendingOpen) -> None:
+        launch.timer = get_running_loop().call_later(
+            max(0, launch.deadline - monotonic()), pending_opens.pop, identifier
+        )
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        for identifier in pending_opens:
+            arm_open(identifier, pending_opens[identifier])
+        try:
+            yield
+        finally:
+            for launch in pending_opens.values():
+                if launch.timer is not None:
+                    launch.timer.cancel()
+            pending_opens.clear()
+
+    app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     session = Session()
     app.state.session = session
-    for raw in paths or []:
-        path = Path(raw).expanduser().resolve()
-        if path.suffix.lower() not in AUDIO_EXTENSIONS:
-            raise ValueError(f"Unsupported audio file: {path.name}")
-        data, sr = read_audio(path)
-        session.lanes.append(Lane(name=path.name, source=str(path), data=data, sr=sr))
+    if launch_id is not None:
+        register_open(launch_id, paths or [])
+    else:
+        for raw in paths or []:
+            path = Path(raw).expanduser().resolve()
+            if path.suffix.lower() not in AUDIO_EXTENSIONS:
+                raise ValueError(f"Unsupported audio file: {path.name}")
+            session.lanes.append(audio_lane(path))
     connections = Connections()
     app.state.settings = select_device(device)
     api._device = app.state.settings["compute_device"]
@@ -131,25 +224,81 @@ def create_app(token: str, device: str = "auto", paths: list[str] | None = None)
                 return lane
         raise HTTPException(404, "Lane not found")
 
-    async def open_paths(paths: list[str], upload_name: str | None = None) -> list[dict]:
-        lanes = []
-        for raw in paths:
-            path = Path(raw).expanduser().resolve()
-            if path.suffix.lower() not in AUDIO_EXTENSIONS:
-                raise HTTPException(400, f"Unsupported audio file: {path.name}")
-            data, sr = read_audio(path)
-            lanes.append(
-                Lane(
-                    name=upload_name or path.name,
-                    source=f"upload:{upload_name}" if upload_name else str(path),
-                    data=data,
-                    sr=sr,
-                )
-            )
+    def find_audio(lane_id: str) -> Lane:
+        lane = find(lane_id)
+        if lane.kind != "audio":
+            raise HTTPException(422, "This route requires an audio lane")
+        return lane
+
+    async def publish_lanes(lanes: list[Lane]) -> dict:
         with session.lock:
             session.lanes.extend(lanes)
+            metadata = [lane.metadata() for lane in lanes]
         await connections.broadcast()
-        return [lane.metadata() for lane in lanes]
+        return {"lanes": metadata}
+
+    def read_tensor_file(path: Path):
+        if path.suffix.lower() not in TENSOR_EXTENSIONS:
+            raise HTTPException(400, f"Unsupported tensor file: {path.name}")
+        try:
+            return load_tensors(path)
+        except UnpicklingError as exc:
+            raise HTTPException(422, "Tensor file rejected by safe weights-only loading") from exc
+        except (OSError, ValueError, RuntimeError, EOFError, BadZipFile) as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    def inspect_tensor(path: Path) -> dict:
+        try:
+            tree = tensor_tree(read_tensor_file(path))
+        except TensorInputError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        if not tree:
+            raise HTTPException(422, "File contains no tensor leaves")
+        return {"needs_interpretation": True, "path": str(path), "tree": tree}
+
+    async def add_tensor(value, interpretation, name, source):
+        try:
+            data, fields = interpret_tensor(value, interpretation)
+        except TensorInputError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        lanes = [
+            Lane(
+                name=name if len(data) == 1 else f"{name} [{index}]",
+                source=source,
+                data=item,
+                **fields,
+            )
+            for index, item in enumerate(data)
+        ]
+        return await publish_lanes(lanes)
+
+    def read_open_audio(path: Path, upload_name: str | None = None) -> Lane:
+        if path.suffix.lower() not in AUDIO_EXTENSIONS:
+            raise HTTPException(400, f"Unsupported audio file: {path.name}")
+        return audio_lane(path, upload_name)
+
+    async def open_paths(paths: list[str], upload_name: str | None = None) -> dict:
+        lanes = [read_open_audio(Path(raw).expanduser().resolve(), upload_name) for raw in paths]
+        return await publish_lanes(lanes)
+
+    async def claim_open(identifier: str) -> dict:
+        launch = pending_opens.pop(identifier, None)
+        if launch is None:
+            raise HTTPException(404, "Launch not found")
+        if launch.timer is not None:
+            launch.timer.cancel()
+        if monotonic() >= launch.deadline:
+            raise HTTPException(404, "Launch not found")
+        if len(launch.paths) == 1:
+            return inspect_tensor(launch.paths[0])
+        lanes, interpretations = [], []
+        for path in launch.paths:
+            if path.suffix.lower() in TENSOR_EXTENSIONS:
+                interpretations.append(inspect_tensor(path))
+            else:
+                lanes.append(read_open_audio(path))
+        publication = await publish_lanes(lanes) if lanes else {"lanes": []}
+        return publication | {"interpretations": interpretations}
 
     @app.get("/api/ping")
     async def ping():
@@ -165,7 +314,7 @@ def create_app(token: str, device: str = "auto", paths: list[str] | None = None)
         directory = Path(path).expanduser().resolve()
         items = []
         for item in sorted(directory.iterdir()):
-            if item.is_dir() or item.suffix.lower() in AUDIO_EXTENSIONS:
+            if item.is_dir() or item.suffix.lower() in AUDIO_EXTENSIONS | TENSOR_EXTENSIONS:
                 stat = item.stat()
                 items.append(
                     {
@@ -178,8 +327,54 @@ def create_app(token: str, device: str = "auto", paths: list[str] | None = None)
         return {"path": str(directory), "entries": items}
 
     @app.post("/api/open")
-    async def open_files(body: OpenRequest):
-        return {"lanes": await open_paths(body.paths)}
+    async def open_files(body: OpenRequest, request: Request):
+        headers = request.headers.getlist(OPEN_LAUNCH_HEADER)
+        if headers:
+            if len(headers) != 1:
+                raise HTTPException(422, "Use exactly one launch header")
+            [identifier] = headers
+            if identifier == "stage":
+                identifier = secrets.token_urlsafe(32)
+                arm_open(identifier, register_open(identifier, body.paths))
+                result = {"launch_id": identifier}
+            else:
+                if body.paths or not _launch_id_pattern.fullmatch(identifier):
+                    raise HTTPException(422, "A claim requires a valid launch ID and empty paths")
+                result = await claim_open(identifier)
+            return JSONResponse(result, headers={"Cache-Control": "no-store"})
+        if len(body.paths) == 1:
+            path = Path(body.paths[0]).expanduser().resolve()
+            if path.suffix.lower() in TENSOR_EXTENSIONS:
+                return inspect_tensor(path)
+        return await open_paths(body.paths)
+
+    @app.post("/api/open_tensor")
+    async def open_tensor(body: OpenTensorRequest):
+        path = Path(body.path).expanduser().resolve()
+        try:
+            value = tensor_leaf(read_tensor_file(path), body.key_path)
+        except TensorInputError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        source = (
+            f"upload:{path.name}"
+            if path.is_relative_to((home() / "uploads").resolve())
+            else str(path)
+        )
+        return await add_tensor(value, body.interpretation, path.name, source)
+
+    @app.post("/api/push")
+    async def push(request: Request):
+        try:
+            value, meta = decode_frame(await request.body())
+            header = PushHeader.model_validate(meta)
+            interpretation = _interpretation.validate_python(
+                header.interpretation | {"kind": header.kind, "sr": header.sr}
+            )
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        if not isinstance(value, np.ndarray):
+            raise HTTPException(422, "Push requires exactly one framed array")
+        return await add_tensor(value, interpretation, header.name, f"push:{header.name}")
 
     @app.post("/api/upload")
     async def upload(request: Request, name: str):
@@ -188,7 +383,9 @@ def create_app(token: str, device: str = "auto", paths: list[str] | None = None)
         path = home() / "uploads" / uuid4().hex / name
         path.parent.mkdir(parents=True)
         path.write_bytes(await request.body())
-        return {"lanes": await open_paths([str(path)], name)}
+        if path.suffix.lower() in TENSOR_EXTENSIONS:
+            return inspect_tensor(path.resolve())
+        return await open_paths([str(path)], name)
 
     @app.post("/api/lanes/reorder")
     async def reorder(body: ReorderRequest):
@@ -230,7 +427,7 @@ def create_app(token: str, device: str = "auto", paths: list[str] | None = None)
         if t1 <= t0 or width <= 0:
             raise HTTPException(422, "Invalid viewport")
         with session.lock:
-            lane = find(lane_id)
+            lane = find_audio(lane_id)
             data = lane.data.numpy()
             if channel is not None:
                 if channel < 0 or channel >= data.shape[0]:
@@ -285,7 +482,7 @@ def create_app(token: str, device: str = "auto", paths: list[str] | None = None)
             if not np.isfinite(w).all():
                 raise HTTPException(422, "Invalid effective window")
         with session.lock:
-            lane = find(lane_id)
+            lane = find_audio(lane_id)
             data = lane.data
             if channel is not None:
                 if channel < 0 or channel >= data.shape[0]:
@@ -382,7 +579,7 @@ def create_app(token: str, device: str = "auto", paths: list[str] | None = None)
     @app.post("/api/lanes/{lane_id}/spectrum")
     def get_spectrum(lane_id: str, body: SpectrumRequest):
         with session.lock:
-            lane = find(lane_id)
+            lane = find_audio(lane_id)
             if body.channel >= lane.data.shape[0]:
                 raise HTTPException(422, "Invalid channel")
             t0 = body.t0 - lane.offset

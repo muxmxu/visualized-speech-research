@@ -49,3 +49,45 @@ def test_multi_array_alignment_and_noncontiguous_big_endian():
     for name, array in source.items():
         np.testing.assert_array_equal(decoded[name], array)
         assert decoded[name].shape == array.shape
+
+
+def frame_from_header(header, payload=b""):
+    encoded = json.dumps(header).encode()
+    prefix = struct.pack("<I", len(encoded)) + encoded
+    return prefix + bytes(-len(prefix) % 8) + payload
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        b"",
+        struct.pack("<I", 100),
+        frame_from_header([]),
+        frame_from_header({"dtype": ["f32"], "shape": [1]}),
+        frame_from_header({"dtype": "f32", "shape": [-1]}),
+        frame_from_header({"dtype": "f32", "shape": [True]}),
+        frame_from_header({"dtype": "u8", "shape": [2**32, 2**32]}),
+        frame_from_header({"dtype": "u8", "shape": [1]}),
+        frame_from_header({"dtype": "u8", "shape": [1]}, b"\0\0"),
+        frame_from_header({"arrays": [{"name": "one", "dtype": "u8", "shape": [1], "offset": 1}]}),
+        frame_from_header(
+            {
+                "arrays": [
+                    {"name": "one", "dtype": "u8", "shape": [1], "offset": 0},
+                    {"name": "one", "dtype": "u8", "shape": [1], "offset": 8},
+                ]
+            },
+            bytes(9),
+        ),
+    ],
+)
+def test_invalid_frame_layout(content):
+    with pytest.raises(ValueError, match="[Ff]rame"):
+        decode_frame(content)
+
+
+def test_empty_array_shapes_and_scalar_round_trip():
+    arrays = {"zero": np.empty((3, 0), dtype=np.float16), "scalar": np.array(4, dtype=np.uint8)}
+    result, _ = decode_frame(encode_frame(arrays))
+    for name, array in arrays.items():
+        np.testing.assert_array_equal(result[name], array)

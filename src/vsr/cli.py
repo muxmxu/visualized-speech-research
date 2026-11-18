@@ -9,22 +9,26 @@ import sys
 import urllib.error
 import urllib.request
 import webbrowser
+from importlib.resources import files
 from pathlib import Path
 
 import uvicorn
 
 from vsr.config import home, load_config
-from vsr.server.app import create_app
+from vsr.io.tensors import TENSOR_EXTENSIONS
+from vsr.server.app import OPEN_LAUNCH_HEADER, create_app
 
 
-def request(runtime: dict, path: str, data: dict | None = None):
+def request(runtime: dict, path: str, data: dict | None = None, *, launch: str | None = None):
     body = json.dumps(data).encode() if data is not None else None
+    headers = {"Authorization": f"Bearer {runtime['token']}", "Content-Type": "application/json"}
+    if launch is not None:
+        headers[OPEN_LAUNCH_HEADER] = launch
     req = urllib.request.Request(
-        f"http://127.0.0.1:{runtime['port']}/api/{path}",
-        data=body,
-        headers={"Authorization": f"Bearer {runtime['token']}", "Content-Type": "application/json"},
+        f"http://127.0.0.1:{runtime['port']}/api/{path}", data=body, headers=headers
     )
-    with urllib.request.urlopen(req, timeout=2) as response:
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(req, timeout=2) as response:
         return json.load(response)
 
 
@@ -43,7 +47,23 @@ def running() -> dict | None:
         return None
 
 
-def serve(host: str, port: int, no_browser: bool, dev: bool, device: str, paths: list[str]) -> None:
+def open_browser(url: str, launch_id: str | None) -> None:
+    if launch_id is None:
+        webbrowser.open(url)
+    else:
+        webbrowser.open(f"{url}#open={launch_id}", new=2)
+
+
+def serve(
+    host: str,
+    port: int,
+    no_browser: bool,
+    dev: bool,
+    device: str,
+    paths: list[str],
+    *,
+    launch_id: str | None = None,
+) -> None:
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     for candidate in range(port, port + 11):
@@ -73,19 +93,49 @@ def serve(host: str, port: int, no_browser: bool, dev: bool, device: str, paths:
     if host == "0.0.0.0":
         print("Warning: server is accessible on all interfaces", flush=True)
     url = f"http://127.0.0.1:{5173 if dev else actual_port}/?token={token}"
-    if dev:
-        print(url, flush=True)
-    elif not no_browser:
-        webbrowser.open(url)
     try:
-        app = create_app(token, device, paths)
+        app = create_app(token, device, paths, launch_id=launch_id)
+        if dev:
+            print(url, flush=True)
+        elif not no_browser:
+            open_browser(url, launch_id)
         uvicorn.run(app, host=host, port=actual_port, fd=listener.fileno())
     finally:
         listener.close()
         runtime_path.unlink(missing_ok=True)
 
 
+def _install_skill(args: list[str]) -> None:
+    parser = argparse.ArgumentParser(prog="vsr skill install")
+    parser.add_argument("--claude", action="store_true")
+    parser.add_argument("--codex", action="store_true")
+    selected = parser.parse_args(args)
+    if not (selected.claude or selected.codex):
+        parser.error("specify --claude, --codex, or both")
+    name = "vsr-speech-visualization"
+    source = Path(files("vsr").joinpath("skills", name)).resolve()
+    home_dir = Path.home()
+    destinations = [
+        home_dir / directory / "skills" / name
+        for enabled, directory in ((selected.claude, ".claude"), (selected.codex, ".agents"))
+        if enabled
+    ]
+    pending = []
+    for destination in destinations:
+        if destination.is_symlink() and destination.resolve() == source:
+            continue
+        if destination.is_symlink() or destination.exists():
+            parser.error(f"skill destination already exists: {destination}")
+        pending.append(destination)
+    for destination in pending:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.symlink_to(source, target_is_directory=True)
+
+
 def main() -> None:
+    if sys.argv[1:3] == ["skill", "install"]:
+        _install_skill(sys.argv[3:])
+        return
     parser = argparse.ArgumentParser(prog="vsr")
     config = load_config()
     if len(sys.argv) > 1 and sys.argv[1] == "serve":
@@ -107,17 +157,24 @@ def main() -> None:
         return
     parser.add_argument("--device", default=None)
     parser.add_argument("paths", nargs="*")
-    args = parser.parse_args()
+    args = parser.parse_intermixed_args()
     device = args.device or config["compute_device"]
+    paths = [Path(raw).expanduser().resolve() for raw in args.paths]
+    has_tensor = any(path.suffix.lower() in TENSOR_EXTENSIONS for path in paths)
+    resolved = [str(path) for path in paths]
     runtime = running()
     if runtime:
         if args.device is not None:
             request(runtime, "settings", {"compute_device": args.device})
-        if args.paths:
-            request(runtime, "open", {"paths": [str(Path(p).resolve()) for p in args.paths]})
-        webbrowser.open(f"http://127.0.0.1:{runtime['port']}/?token={runtime['token']}")
+        launch_id = None
+        if has_tensor:
+            launch_id = request(runtime, "open", {"paths": resolved}, launch="stage")["launch_id"]
+        elif paths:
+            request(runtime, "open", {"paths": resolved})
+        open_browser(f"http://127.0.0.1:{runtime['port']}/?token={runtime['token']}", launch_id)
     else:
-        serve("127.0.0.1", config["port"], False, False, device, args.paths)
+        launch_id = secrets.token_urlsafe(32) if has_tensor else None
+        serve("127.0.0.1", config["port"], False, False, device, resolved, launch_id=launch_id)
 
 
 if __name__ == "__main__":
