@@ -38,6 +38,36 @@ def test_auth_open_mutate_and_source(tmp_path, monkeypatch):
     assert path.read_bytes() == original
 
 
+def test_delete_second_lane_with_same_source(tmp_path, monkeypatch):
+    monkeypatch.setenv("VSR_HOME", str(tmp_path))
+    path = tmp_path / "signal.wav"
+    sf.write(path, np.array([0, 0.5, -0.5], dtype=np.float32), 8000)
+    headers = {"Authorization": "Bearer secret"}
+    with TestClient(create_app("secret", "cpu"), raise_server_exceptions=False) as client:
+        with client.websocket_connect("/ws?token=secret") as ws:
+            for _ in range(2):
+                opened = client.post("/api/open", json={"paths": [str(path)]}, headers=headers)
+                assert opened.status_code == 200
+                assert ws.receive_json() == {"type": "lanes_changed"}
+            lanes = client.get("/api/session", headers=headers).json()["lanes"]
+            assert len(lanes) == 2
+            assert lanes[0]["id"] != lanes[1]["id"]
+            assert lanes[0]["source"] == lanes[1]["source"] == str(path)
+            response = client.delete(f"/api/lanes/{lanes[1]['id']}", headers=headers)
+            assert response.status_code == 200, response.text
+            assert response.json() == {"ok": True}
+            assert ws.receive_json() == {"type": "lanes_changed"}
+            assert client.get("/api/session", headers=headers).json()["lanes"] == [lanes[0]]
+            response = client.delete(f"/api/lanes/{lanes[1]['id']}", headers=headers)
+            assert response.status_code == 404
+            assert response.json() == {
+                "error": "HTTP error",
+                "detail": "Lane not found",
+                "traceback": None,
+            }
+            assert client.get("/api/session", headers=headers).json()["lanes"] == [lanes[0]]
+
+
 def test_upload_and_error_payload(tmp_path, monkeypatch):
     monkeypatch.setenv("VSR_HOME", str(tmp_path))
     original = tmp_path / "original.wav"

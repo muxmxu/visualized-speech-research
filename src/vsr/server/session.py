@@ -1,5 +1,6 @@
 """In-memory audio lanes."""
 
+from collections import OrderedDict
 from dataclasses import dataclass, field
 from threading import RLock
 from uuid import uuid4
@@ -35,6 +36,11 @@ class Lane:
 class Session:
     lanes: list[Lane] = field(default_factory=list)
     lock: RLock = field(default_factory=RLock)
+    cache_lock: RLock = field(default_factory=RLock)
+    cache: OrderedDict = field(default_factory=OrderedDict)
+    cache_size: int = 0
+    cache_generation: int = 0
+    inflight: dict = field(default_factory=dict)
 
     def lane(self, lane_id: str) -> Lane:
         return next(lane for lane in self.lanes if lane.id == lane_id)

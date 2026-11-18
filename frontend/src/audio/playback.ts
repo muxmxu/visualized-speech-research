@@ -2,6 +2,10 @@ import { notifications } from '@mantine/notifications';
 import { request } from '../api/client';
 import { decodeFrame, type FrameArray } from '../api/frame';
 import type { Lane } from '../api/types';
+import type { TfSelection } from '../state/tfSelection';
+import type { SpectralView } from '../state/spectralViews';
+
+type Mask = { selection: TfSelection; view: SpectralView };
 
 export function chunkBounds(start: number, end: number, sr: number): [number, number][] {
   const result: [number, number][] = [];
@@ -26,6 +30,7 @@ export class Playback {
   private queueLoop: ((loop: boolean, boundary: number) => void) | null = null;
   private laneIds: string[] = [];
   private channels: Record<string, number> = {};
+  private mask: Mask | undefined;
   private tick: ((position: number, playing: boolean) => void) | null = null;
   private loading = false;
   private restartAnchor: number | undefined;
@@ -60,7 +65,7 @@ export class Playback {
       const boundary = anchor === undefined ? undefined : this.stopAt;
       const tick = this.tick as (position: number, playing: boolean) => void;
       if (remaining.length === 0) { const position = this.position; this.stop(position); tick(position, false); return; }
-      await this.play(remaining, start, end, this.looping, channels, tick, anchor, boundary);
+      await this.play(remaining, start, end, this.looping, channels, tick, anchor, boundary, this.mask);
       return;
     }
     const solo = lanes.some(lane => lane.solo);
@@ -76,10 +81,10 @@ export class Playback {
     for (const gain of this.gains.values()) gain.disconnect();
     this.gains.clear();
   }
-  async play(lanes: Lane[], start: number, end: number, loop: boolean, channels: Record<string, number>, tick: (position: number, playing: boolean) => void, anchor?: number, boundary?: number) {
+  async play(lanes: Lane[], start: number, end: number, loop: boolean, channels: Record<string, number>, tick: (position: number, playing: boolean) => void, anchor?: number, boundary?: number, mask?: Mask) {
     this.stop(start);
     const generation = this.generation;
-    this.laneIds = lanes.map(lane => lane.id); this.channels = { ...channels }; this.tick = tick; this.loading = true; this.restartAnchor = anchor;
+    this.mask = mask; this.laneIds = lanes.map(lane => lane.id); this.channels = { ...channels }; this.tick = tick; this.loading = true; this.restartAnchor = anchor;
     const sr = this.context.sampleRate;
     this.startSample = Math.round(start * sr); this.endSample = Math.round(end * sr); this.looping = loop;
     if (lanes.length === 0 || this.endSample <= this.startSample) { this.loading = false; return; }
@@ -97,6 +102,7 @@ export class Playback {
         if (last > first) {
           const params = new URLSearchParams({ t0: String(lane.offset + first / sr), t1: String(lane.offset + last / sr), sr: String(sr) });
           if (lane.channels > 2) params.set('channel', String(channels[lane.id] ?? 0));
+          if (mask) { const { selection, view } = mask; Object.entries({ selection_t0: selection.t0, selection_t1: selection.t1, f_lo: selection.f_lo, f_hi: selection.f_hi, n_fft: view.n_fft, win_length: view.win_length, window: view.window, window_param: view.window_param }).forEach(([key, value]) => params.set(key, String(value))); }
           let response: Response;
           try {
             response = await request(`/lanes/${lane.id}/pcm?${params}`);
