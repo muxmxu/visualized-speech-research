@@ -6,6 +6,7 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+M2-T5a verified cold and warm CLI Tensor opening through the real browser, passed 75 selected pytest, 37 Vitest and seven Chromium cases with independent review, and was committed locally as `4ad71c604d6a1a74a3293b9ce4b03c4668b87401`.
 H59 directs first usable delivery through normal workflows with no optional defensive expansions or repeated checks, and this instruction applies to all remaining work.
 M2-T5 passed both independent reviews on the frozen 14-case browser run and the D38 executor committed exactly the approved tree as `f997b75fdad271bfccddf1d433b29973ca348b99`.
 The reviewed M2 CLI launch contract D49 was integrated as spec-only commit `f37ad73676e7248654e9c9c60b4f3a82ac117e39`, with only DESIGN §§7 and 21 changed and all 92 other non-record blobs identical to fully tested M1.
