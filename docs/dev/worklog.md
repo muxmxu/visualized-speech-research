@@ -6,6 +6,8 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+M1-T4a passed independent mechanical audit and semantic review on the frozen two-file tree, and the D38 executor committed it locally as `411e0cf9a65614d9a3374bb5a4a8b08ea025b170` without pushing the task branch.
+The independent T4a check reproduced the old duplicate-source deletion 500, passed 119 Python tests and 40 Chromium tests on the final tree, and reported 12 high-severity npm audit findings for later triage.
 H56 identified poor visual quality in the accepted M1 workspace screenshots, and the M1 plan now places a bounded DESIGN §9 presentation refinement after T4a and before Frequency Analysis.
 The independent M1-T3 task plan fixes the absolute frame grid, bounded resampling support, whole-lane oracle, authenticated boundary cases, and four-path write set.
 D45 records the exterior half-cosine mask profile and the invalid effective-window boundary, with T8 assigned the DESIGN §21 entry.
