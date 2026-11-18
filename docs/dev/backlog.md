@@ -8,4 +8,4 @@
 | B2 | LICENSE 与作者、维护者字段：由 Human 决定，agent 不填写；发布之前需要 | H19（T4 实例化时发现） | scope | 等 Human；需要时（发布之前）作为 gate 请求 | — |
 | B3 | 可在工作台对屏幕可见图像框选局部并导出 PDF；当前 DESIGN 只有 `vsr.plot.savefig` 的 PDF 元数据描述，没有工作台视口局部导出 | H45 | scope | 已获 Human 授权，待写入 DESIGN 并列入 milestone 计划 | C1 |
 | B4 | RIR 视图增加脉冲响应系数与延迟 τ 双轴图，可点选直达声与后续到达并读出时间、振幅及延迟差；与既有 EDC、拟合线和结果表一起实现 | H48 | scope | Human 已提出需求，M7 的 arch phase 明确交互与验收后实现 | C3 |
-| B5 | `npm ci` 的审计摘要报告 12 项 high severity 漏洞；在 C1 发布前核对依赖来源、影响路径与修复版本 | M1-T4a mechanical audit | ordinary | 待核对 | C1 |
+| B5 | `npm ci` 的审计摘要报告 12 项 high severity 漏洞；在 C1 发布前核对依赖来源、影响路径与修复版本 | M1-T4a mechanical audit | ordinary | Audited for the C1 candidate: zero runtime findings and 12 high development-toolchain entries; recorded paths and suggested versions in release acceptance | C1 |

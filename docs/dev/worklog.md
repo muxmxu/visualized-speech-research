@@ -6,6 +6,8 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+The 0.1.0 candidate at `fbb5061a2828c80f76f844c56225a46db058e8fa` passed clean-wheel smoke and all seven measurements after independent review, and formal R1.7 and R1.8 remain pending B2 and the Human publication scan.
+M4 T1 and T2 started from exact product bytes at `2b448df` with disjoint paths, with idle WS state implicit so new record-state events preserve existing idle client behavior.
 The C2 and M4 Plan Review passed with two incorporated §11 clarifications about exclusive overdub trimming and completion warning notifications, and M4 backend and browser authoring can begin in parallel.
 The C1 release-preparation Plan Review passed, and the installable candidate verification can run independently of human-owned B2 and publication confirmation.
 M3 is delivered as `7cf8df9c5ee64abfbbdc9aa0b355190d1c8d5dc8` with 260 Python and 37 Vitest passes plus 75 distinct Chromium passes across the original run and the one targeted test-only selector repair, and main differs from the reviewed phase tree only in the A1 plan record.
