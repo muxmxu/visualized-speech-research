@@ -6,6 +6,8 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+M6 is delivered at `f478d71d9d1cb6745557f8bc874c8191686fbe05` with exact phase tree equality, 268 pytest and 37 Vitest passes and both disjoint browser groups passing all 78 distinct cases.
+The exact arch-M7 patch and M7 plan passed independent review with their clarifications and the delivered M6 DESIGN byte baseline matches the architecture freeze.
 M6 independently accepted T1 and T2 at `f6266aa782b120b98b31ecad0a6b751c79095c8f` and `bda8c5a5d447a65e3c5d2a8b06cb93216ca69574`, and the combined candidate is ready for the real dataset workflow and disjoint regression.
 The locally verified 0.2.0 candidate is pinned at `8bf040355bfdde2d0333bdfd61d6dbdd39634340` with exact installed wheel evidence, seven recorded medians, and formal publication pending B2 and the Human scan.
 M5 is delivered at `1f1d5a585763ccf8b381c0ebeba874d562601c26` with 267 distinct pytest, 37 Vitest, and 77 Chromium cases passing across reviewed exact inputs, including the full real analyzer workflow and isolated correction to device switching.
