@@ -46,6 +46,7 @@ from vsr.io.tensors import (
 )
 from vsr.presets import preset_definitions, resolve_preset
 from vsr.server.routes_analyzers import register_analyzers
+from vsr.server.routes_datasets import register_datasets
 from vsr.server.routes_edit import register_edit
 from vsr.server.routes_record import register_record
 from vsr.server.routes_spectrogram import register_spectrogram
@@ -167,7 +168,7 @@ def create_app(
             arm_open(identifier, pending_opens[identifier])
         try:
             await run_in_threadpool(analyzers.refresh)
-            async with recording.lifespan():
+            async with recording.lifespan(), datasets.lifespan():
                 yield
         finally:
             for launch in pending_opens.values():
@@ -632,6 +633,9 @@ def create_app(
 
     register_analyzers(app, session, find, connections, _heavy_compute, analyzers)
     register_edit(app, session, find_audio, _heavy_compute, connections)
+    datasets = register_datasets(
+        app, analyzers, session, connections, home() / "cache" / "datasets.sqlite"
+    )
     recording = register_record(
         app, session, find_audio, connections, Path(config["recordings_dir"]).expanduser().resolve()
     )

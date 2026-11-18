@@ -9,6 +9,7 @@ import sys
 import urllib.error
 import urllib.request
 import webbrowser
+from functools import partial
 from importlib.resources import files
 from pathlib import Path
 
@@ -132,7 +133,67 @@ def _install_skill(args: list[str]) -> None:
         destination.symlink_to(source, target_is_directory=True)
 
 
+def _scan(args: list[str]) -> None:
+    import numpy as np
+
+    from vsr.dataset.scan import (
+        aggregate,
+        csv_cell,
+        enumerate_sources,
+        scan,
+        write_atomic,
+        write_csv,
+    )
+
+    parser = argparse.ArgumentParser(prog="vsr scan")
+    parser.add_argument("sources", metavar="SOURCE", nargs="+")
+    parser.add_argument("-o", metavar="metrics.csv", required=True, type=Path)
+    parser.add_argument("--ltas", metavar="ltas.npz", type=Path)
+    parser.add_argument("--group-by", metavar="COL", default="source")
+    options = parser.parse_args(args)
+
+    try:
+        files = enumerate_sources(options.sources)
+        cache_file = home() / "cache" / "datasets.sqlite"
+        paths = {
+            options.o.expanduser().resolve(),
+            *([options.ltas.expanduser().resolve()] if options.ltas is not None else []),
+        }
+        if options.ltas is not None and len(paths) != 2:
+            raise ValueError("CSV and LTAS output paths must differ")
+        source_files = {entry.path for entry in files.entries} | set(files.paths)
+        for path in paths:
+            if (
+                path == cache_file.resolve()
+                or path in source_files
+                or any(path.is_relative_to(directory) for directory in files.directories)
+            ):
+                raise ValueError(f"Output would write to a dataset source or its cache: {path}")
+
+        dataset = scan(files, cache_file)
+        if options.ltas is not None:
+            if options.group_by not in dataset.data:
+                raise ValueError(f"Unknown group column: {options.group_by}")
+            groups = {}
+            for index, cell in enumerate(dataset.data[options.group_by]):
+                label = "(missing)" if cell is None else str(csv_cell(cell))
+                groups.setdefault(label, []).append(index)
+            payload = aggregate(dataset, groups)
+            payload["groups"] = np.asarray(list(groups), dtype=np.str_)
+            write_atomic(
+                options.ltas.expanduser().resolve(), partial(np.savez, **payload), binary=True
+            )
+        write_atomic(
+            options.o.expanduser().resolve(), lambda document: write_csv(document, dataset)
+        )
+    except (OSError, ValueError) as exc:
+        parser.error(str(exc))
+
+
 def main() -> None:
+    if sys.argv[1:2] == ["scan"]:
+        _scan(sys.argv[2:])
+        return
     if sys.argv[1:3] == ["skill", "install"]:
         _install_skill(sys.argv[3:])
         return

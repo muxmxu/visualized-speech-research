@@ -6,11 +6,11 @@ import type { PointerEvent as ReactPointerEvent } from 'react';
 import { notifications } from '@mantine/notifications';
 import { Loader, Modal } from '@mantine/core';
 import { IconPlayerPlay, IconPlayerPause, IconPlayerStop, IconPlayerRecord, IconRepeat, IconCursorText, IconArrowsMove, IconDots } from '@tabler/icons-react';
-import { ApiError, analyze, analyzers, armRecording, audioDevices, body, calibrateRecording, editLane, json, mixdown, request, saveLane, startRecording, stepHistory, stopRecording, token } from './api/client';
+import { ApiError, analyze, analyzers, armRecording, audioDevices, body, calibrateRecording, editLane, json, mixdown, notifyApiFailure, request, saveLane, startRecording, stepHistory, stopRecording, token } from './api/client';
 import { decodeFrame } from './api/frame';
 import type { FrameArray } from './api/frame';
 import { isSpectralLane, laneDuration } from './api/types';
-import type { AnalyzerCatalog, AnalyzerDefinition, AnalyzerValue, CurveLane, WorkspaceLane } from './api/types';
+import type { AnalyzerCatalog, AnalyzerDefinition, AnalyzerValue, CurveLane, DatasetProgress, WorkspaceLane } from './api/types';
 import type { AudioDevices, Directory, EditOperation, Lane, LaneEdit, MixdownRequest, OpenResult, RecordMapping, RecordMeter, RecordPreview, RecordState, RecordingWarning, SaveSubtype, SessionLane, Settings, TensorIntake } from './api/types';
 import { drawWaveform, waveformUpdates } from './render/waveform';
 import { fit, pan, zoom, formatTime, yToFrequency } from './state/viewport';
@@ -21,6 +21,7 @@ import { TfSelection } from './lanes/TfSelection';
 import { EditMenu, SelectionActions, type SelectionCommands } from './lanes/SelectionActions';
 import type { TfSelection as TfSelectionState } from './state/tfSelection';
 import { Display } from './panels/Display';
+import { Dataset } from './panels/Dataset';
 import { FrequencyAnalysis } from './panels/FrequencyAnalysis';
 import type { AnalyzerSpectrumResult } from './panels/FrequencyAnalysis';
 import { Analyzers } from './panels/Analyzers';
@@ -44,7 +45,7 @@ const idleRecording: RecordState = { type: 'record_state', state: 'idle', mappin
 const warningLabels: Record<RecordingWarning['type'], string> = {
   input_overflow: 'Input overflow', output_underflow: 'Output underflow',
 };
-type WorkspaceEvent = RecordState | RecordMeter | { type: 'lanes_changed' | 'job_progress' | 'plugins_changed' } |
+type WorkspaceEvent = RecordState | RecordMeter | DatasetProgress | { type: 'lanes_changed' | 'plugins_changed' } |
   { type: 'error'; error: string; detail: string; traceback: string | null };
 
 type Menu = { x: number; y: number } & ({ kind: 'lane'; lane: Lane } | { kind: 'time'; lane: Lane } | { kind: 'frequency' } | { kind: 'empty' });
@@ -271,6 +272,7 @@ export default function App() {
   const [channels, setChannels] = useState<Record<string, number>>({});
   const [views, setViews] = useState<LaneView[]>([]);
   const [catalog, setCatalog] = useState<AnalyzerCatalog | null>(null);
+  const [datasetProgress, setDatasetProgress] = useState<Partial<Record<string, DatasetProgress>>>({});
   const [analyzerFeedback, setAnalyzerFeedback] = useState<AnalyzerFeedback | null>(null);
   const [analyzerPending, setAnalyzerPending] = useState(false);
   const [analyzerSpectra, setAnalyzerSpectra] = useState<AnalyzerSpectrumResult[]>([]);
@@ -450,14 +452,22 @@ export default function App() {
         return;
       }
       const message = JSON.parse(data as string) as WorkspaceEvent;
-      if (message.type === 'lanes_changed') run(refresh());
-      else if (message.type === 'plugins_changed') run(refreshAnalyzers());
-      else if (message.type === 'record_state') acceptRecordState(message);
-      else if (message.type === 'record_meter') setMeter(message);
-      else if (message.type === 'error') notifications.show({
-        title: message.error, message: message.traceback ? `${message.detail}\n${message.traceback}` : message.detail,
-        color: 'red', autoClose: false,
-      });
+      switch (message.type) {
+        case 'lanes_changed': run(refresh()); break;
+        case 'plugins_changed': run(refreshAnalyzers()); break;
+        case 'job_progress':
+          setDatasetProgress(old => ({ ...old, [message.id]: message }));
+          if (message.error) notifyApiFailure(message.error);
+          break;
+        case 'record_state': acceptRecordState(message); break;
+        case 'record_meter': setMeter(message); break;
+        case 'error':
+          notifications.show({
+            title: message.error, message: message.traceback ? `${message.detail}\n${message.traceback}` : message.detail,
+            color: 'red', autoClose: false,
+          });
+          break;
+      }
     };
     return () => socket.close();
   }, [refresh, browse, queueTensors, acceptRecordState, refreshAnalyzers]);
@@ -482,6 +492,11 @@ export default function App() {
       dock.addPanel({ id: 'settings', component: 'settings', title: 'Settings', position: { referencePanel: 'properties', direction: 'within' } });
       dock.addPanel({ id: 'display', component: 'display', title: 'Display', position: { referencePanel: 'properties', direction: 'within' } });
     }
+    if (!dock.api.getPanel('dataset')) {
+      dock.addPanel({ id: 'dataset', component: 'dataset', title: 'Dataset', inactive: true,
+        position: { referencePanel: 'lanes', direction: 'within' } });
+      localStorage.setItem('vsr-layout', JSON.stringify(dock.toJSON()));
+    }
     if (!dock.api.getPanel('analyzers')) {
       const previous = dock.api.getPanel('display')?.group.activePanel;
       dock.addPanel({ id: 'analyzers', component: 'analyzers', title: 'Analyzers', position: { referencePanel: 'display', direction: 'within' } });
@@ -501,8 +516,11 @@ export default function App() {
     const nameTabs = () => element.querySelectorAll<HTMLElement>('.dv-default-tab-content').forEach(tab => { tab.title = tab.innerText; });
     nameTabs();
     const listener = dock.onDidLayoutChange(() => { nameTabs(); localStorage.setItem('vsr-layout', JSON.stringify(dock.toJSON())); });
-    const activePanel = dock.api.onDidActivePanelChange(({ panel }) => { if (panel?.id === 'analyzers') run(refreshAnalyzers()); });
-    if (dock.api.activePanel?.id === 'analyzers') run(refreshAnalyzers());
+    const refreshCatalogForPanel = (id: string | undefined) => {
+      if (id === 'analyzers' || id === 'dataset') run(refreshAnalyzers());
+    };
+    const activePanel = dock.api.onDidActivePanelChange(({ panel }) => refreshCatalogForPanel(panel?.id));
+    refreshCatalogForPanel(dock.api.activePanel?.id);
     const resize = new ResizeObserver(() => dock.layout(element.clientWidth, element.clientHeight)); resize.observe(element);
     return () => { resize.disconnect(); activePanel.dispose(); listener.dispose(); dockRef.current = null; dock.dispose(); };
   }, [refreshAnalyzers]);
@@ -522,6 +540,13 @@ export default function App() {
     else if (file) remember(file);
   };
   const open = async (file: string) => acceptOpen(await json<OpenResult>('/open', body({ paths: [file] })), file);
+  const openDataset = () => {
+    const dock = dockRef.current;
+    if (!dock) return;
+    const panel = dock.api.getPanel('dataset') ?? dock.addPanel({ id: 'dataset', component: 'dataset', title: 'Dataset',
+      position: { referencePanel: 'lanes', direction: 'within' } });
+    panel.api.setActive();
+  };
   const closeTensor = () => setTensorIntakes(old => old.slice(1));
   const currentTensor = tensorIntakes.at(0);
   const reorder = (index: number, direction: number) => { const ids = lanes.map(lane => lane.id); const other = index + direction; if (other < 0 || other >= ids.length) return; [ids[index], ids[other]] = [ids[other], ids[index]]; run(json('/lanes/reorder', body({ ids }))); };
@@ -774,7 +799,10 @@ export default function App() {
             {menuButton('Save As…', () => startSave(lane, true), 'Ctrl/Cmd+Shift+S')}
           </>}
         </>}
-        {current.kind === 'empty' && menuButton('Show all', () => setView(fit(start, end, width)), '0')}
+        {current.kind === 'empty' && <>
+          {menuButton('Show all', () => setView(fit(start, end, width)), '0')}
+          {menuButton('Open Dataset', openDataset)}
+        </>}
       </>;
     }
     return <EditMenu x={current.x} y={current.y} dismiss={dismissMenu}>{items}
@@ -873,6 +901,7 @@ export default function App() {
   const selectedDisplayView = activeView && isSpectralView(activeView) ? activeView : undefined;
   const naturalRange = spectralRange('auto80', activePackets, activeIsRaw);
   const panels: Record<string, React.ReactNode> = {
+    dataset: <Dataset catalog={catalog} progress={datasetProgress} open={file => run(open(file).then(() => dockRef.current?.api.getPanel('lanes')?.api.setActive()))} />,
     'frequency-analysis': <FrequencyAnalysis lanes={audioLanes} views={audioViews} selectedView={selectedView} channels={channels} selection={selection} playhead={playhead} hoverTime={analysisHover} tfSelection={tfSelection}
       analyzerSpectra={analyzerSpectra.filter(item => lanes.some(lane => lane.id === item.lane))} selectedSpectrum={selectedSpectrum} onSelectSpectrum={setSelectedSpectrum} />,
     analyzers: <Analyzers lane={analyzerLane} catalog={catalog} channel={analyzerChannel} selection={analyzerInterval}

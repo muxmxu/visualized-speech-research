@@ -5,15 +5,16 @@ import math
 import sys
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
+from hashlib import sha256
 from importlib.util import module_from_spec, spec_from_file_location
-from inspect import getmembers, isfunction, signature
+from inspect import Signature, getmembers, isfunction, signature
 from pathlib import Path
 from threading import RLock
 from types import ModuleType
 from uuid import uuid4
 
 from vsr.analyzers import builtin
-from vsr.api import Param
+from vsr.api import Param, Scalars
 
 logger = logging.getLogger(__name__)
 _TYPES = {float: "float", int: "int", bool: "bool", str: "str"}
@@ -27,6 +28,8 @@ class Analyzer:
     input: str
     function: Callable
     params: dict[str, Param]
+    output: str | None
+    source_revision: str
 
     def metadata(self) -> dict:
         return {
@@ -34,6 +37,7 @@ class Analyzer:
             "label": self.label,
             "version": self.version,
             "input": self.input,
+            "output": self.output,
             "params": {
                 name: asdict(param) | {"type": _TYPES[type(param.default)]}
                 for name, param in self.params.items()
@@ -61,21 +65,39 @@ class Analyzer:
         return normalized
 
 
-def declarations(module: ModuleType) -> dict[str, Analyzer]:
+def output_kind(annotation, namespace):
+    if annotation is Signature.empty:
+        return None
+    if isinstance(annotation, str):
+        name, *attributes = annotation.strip("'\"").split(".")
+        annotation = namespace.get(name)
+        for attribute in attributes:
+            annotation = getattr(annotation, attribute, None)
+    return "scalars" if annotation is Scalars else "other"
+
+
+def declarations(module: ModuleType, source_revision: str = "") -> dict[str, Analyzer]:
     entries = {}
     for _, function in getmembers(module, isfunction):
         info = getattr(function, "__vsr_analyzer__", None)
         if info is None or function.__module__ != module.__name__:
             continue
+        declared = signature(function)
         params = {
             name: parameter.default
-            for name, parameter in signature(function).parameters.items()
+            for name, parameter in declared.parameters.items()
             if isinstance(parameter.default, Param)
         }
         for name, param in params.items():
             if type(param.default) not in _TYPES:
                 raise ValueError(f"Parameter {name} needs a float, int, bool or str default")
-        entry = Analyzer(**info, function=function, params=params)
+        entry = Analyzer(
+            **info,
+            function=function,
+            params=params,
+            source_revision=source_revision,
+            output=output_kind(declared.return_annotation, vars(module)),
+        )
         entry.arguments({})
         if entry.id in entries:
             raise ValueError(f"Duplicate analyzer id: {entry.id}")
@@ -96,8 +118,10 @@ def load_plugin(path: Path, mtime_ns: int) -> Plugin:
     sys.modules[name] = module
     try:
         # Compile current bytes, including same-size rewrites within the timestamp of a pyc.
-        exec(compile(path.read_bytes(), str(path), "exec"), module.__dict__)
-        return Plugin(mtime_ns, declarations(module))
+        source = path.read_bytes()
+        exec(compile(source, str(path), "exec"), module.__dict__)
+        revision = f"{path}:{mtime_ns}:{sha256(source).hexdigest()}"
+        return Plugin(mtime_ns, declarations(module, revision))
     except Exception as exc:
         logger.exception("Could not load analyzer plugin %s", path)
         return Plugin(mtime_ns, {}, f"{type(exc).__name__}: {exc}")

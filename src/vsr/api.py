@@ -1,5 +1,7 @@
 """Public analyzer declarations and compute device."""
 
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Literal
 
@@ -9,10 +11,20 @@ import torch
 Array = torch.Tensor | np.ndarray
 
 _device = "cpu"
+_dataset_cpu = ContextVar("vsr_dataset_cpu", default=False)
 
 
 def compute_device() -> torch.device:
-    return torch.device(_device)
+    return torch.device("cpu" if _dataset_cpu.get() else _device)
+
+
+@contextmanager
+def _dataset_cpu_scope():
+    token = _dataset_cpu.set(True)
+    try:
+        yield
+    finally:
+        _dataset_cpu.reset(token)
 
 
 @dataclass(frozen=True)

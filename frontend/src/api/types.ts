@@ -90,6 +90,7 @@ export interface AnalyzerParam {
 }
 export interface AnalyzerDefinition {
   id: string; label: string; version: number; input: 'audio' | 'feature'; params: Record<string, AnalyzerParam>;
+  output: 'scalars' | 'other' | null;
 }
 export interface AnalyzerCatalog { analyzers: AnalyzerDefinition[]; errors: { file: string; error: string }[] }
 export interface AnalyzerRequest {
@@ -104,3 +105,18 @@ export interface AnalyzerSpectrum {
 export type AnalyzerResult = AnalyzerLaneResult | AnalyzerScalarResult | AnalyzerSpectrum;
 export type EventInterval = [t0: number, t1: number, label: string];
 export interface AnalyzerCurveData { times: Float32Array; values: Float32Array }
+
+export interface ApiFailure { error: string; detail: string; traceback: string | null }
+export interface DatasetAnalyzer { id: string; params: Record<string, AnalyzerValue> }
+export interface DatasetScan { sources: string[]; bandwidth_drop_db: number; analyzers: DatasetAnalyzer[] }
+export interface DatasetProgress {
+  type: 'job_progress'; id: string; status: 'running' | 'done' | 'cancelled' | 'failed';
+  completed: number; total: number; error: ApiFailure | null;
+}
+export type DatasetCell = null | boolean | number | string | DatasetCell[] | { [key: string]: DatasetCell };
+export interface DatasetTable { columns: string[]; data: Record<string, DatasetCell[]> }
+export interface DatasetRow { index: number; cells: Record<string, DatasetCell> }
+export interface DatasetLtas {
+  frequencies: Float32Array; groups: string[]; unit: 'db_per_hz';
+  mean: Float32Array; p10: Float32Array; p90: Float32Array;
+}

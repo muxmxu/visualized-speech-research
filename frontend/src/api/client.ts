@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { decodeFrame } from './frame';
 import type { FrameArray } from './frame';
 import type { AnalyzerCatalog, AnalyzerCurveData, AnalyzerLaneResult, AnalyzerRequest, AnalyzerResult, AnalyzerScalarResult, AnalyzerSpectrum, EventInterval } from './types';
+import type { ApiFailure, DatasetLtas, DatasetScan, DatasetTable } from './types';
 import type { AudioDevices, Lane, LaneEdit, MixdownRequest, RecordArm, RecordCalibrate, RecordStart, RecordState, SaveSubtype } from './types';
 
 const params = new URLSearchParams(location.search);
@@ -17,6 +18,11 @@ export class ApiError extends Error {
   constructor(message: string, readonly status: number) { super(message); }
 }
 export class NetworkError extends Error {}
+export function notifyApiFailure(error: ApiFailure) {
+  const message = error.traceback ? createElement('div', null, error.detail, createElement('details',
+    { className: 'api-traceback' }, createElement('summary', null, 'Traceback'), createElement('pre', null, error.traceback))) : error.detail;
+  notifications.show({ title: error.error, message, color: 'red', autoClose: false });
+}
 export async function request(path: string, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
   headers.set('Authorization', `Bearer ${token}`);
@@ -25,10 +31,8 @@ export async function request(path: string, init: RequestInit = {}): Promise<Res
     throw error;
   });
   if (!response.ok) {
-    const error = await response.json() as { error: string; detail: string; traceback: string | null };
-    const message = error.traceback ? createElement('div', null, error.detail, createElement('details',
-      { className: 'api-traceback' }, createElement('summary', null, 'Traceback'), createElement('pre', null, error.traceback))) : error.detail;
-    notifications.show({ title: error.error, message, color: 'red', autoClose: false });
+    const error = await response.json() as ApiFailure;
+    notifyApiFailure(error);
     throw new ApiError(error.detail, response.status);
   }
   return response;
@@ -88,4 +92,22 @@ export async function analyzerCurveData(id: string, signal: AbortSignal): Promis
 }
 export function analyzerEvents(id: string, signal: AbortSignal) {
   return json<{ items: EventInterval[] }>(`/lanes/${id}/data`, { signal });
+}
+
+export function scanDataset(scan: DatasetScan) {
+  return json<{ id: string }>('/datasets', body(scan));
+}
+export function cancelDataset(id: string) {
+  return json<{ id: string }>(`/datasets/${id}/cancel`, { method: 'POST' });
+}
+export function datasetRows(id: string, signal: AbortSignal) {
+  return json<DatasetTable>(`/datasets/${id}/rows`, { signal });
+}
+export async function datasetLtas(id: string, groups: Record<string, number[]>, signal: AbortSignal): Promise<DatasetLtas> {
+  const response = await request(`/datasets/${id}/ltas`, { ...body({ groups }), signal });
+  const { header, arrays } = decodeFrame(await response.arrayBuffer());
+  const data = arrays as Record<string, FrameArray>;
+  return { groups: header.groups as string[], unit: header.unit as 'db_per_hz',
+    frequencies: data.freqs.data as Float32Array, mean: data.mean.data as Float32Array,
+    p10: data.p10.data as Float32Array, p90: data.p90.data as Float32Array };
 }
