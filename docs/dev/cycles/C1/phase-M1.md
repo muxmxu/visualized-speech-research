@@ -74,6 +74,20 @@ Run `uv run pytest -ra tests/test_spectral_dsp.py tests/test_presets.py tests/te
 Check the two new routes for authentication, request validation, preset response shape and framed spectrum frequencies, units and statistics.
 Provide M1.1, M1.2, M1.4 and the relevant M1.5 evidence.
 
+### T1 task amendment after semantic reviews 1 and 2
+
+The two consecutive FAILs are recorded in [review 1](reports/M1-T1-review-1.md) and [review 2](reports/M1-T1-review-2.md).
+This is the sole allowed task amendment and addresses review 2's remaining zero-power Welch PSD finding within T1's existing write set and checks.
+First add regressions in `tests/test_spectral_dsp.py` and record their failure on the review-2 tree at both the public `vsr.dsp.welch` entry and the authenticated spectrum route, decoding the framed response.
+With `unit=db_per_hz` and `active_only=false`, require mean, median, p10, p90 and max at every bin of an all-zero input to be −∞.
+For mixed zero and positive frames, use a nonoverlapping generated fixture with independently known powers at a tested bin and assert Welch's linear percentiles in the dB domain.
+An exact rank returns its ordered dB value, an interpolated rank with a positively weighted zero-power endpoint returns −∞, and interpolation between finite dB values retains the specified finite result.
+Exercise a low percentile that touches zero power and a finite percentile in both entry paths.
+Repair Welch PSD without a dBFS floor or replacement value, preserve finite-input results, and keep the SciPy relationships and strict absolute error <0.05 dB for M1.2.
+Keep the full-interval length rejection per [D44](../../decisions.md), whose DESIGN §21 entry belongs to phase integration.
+Rerun the existing checks and obtain fresh independent mechanical and semantic verdicts on the repaired tree.
+Any further semantic FAIL makes T1 BLOCKED under the CODEX review cap.
+
 ## M1-T2 — Bounded spectrogram cache and viewport response
 
 Deliver the §8.3 STFT spectrogram endpoint from the T1 kernel, with a byte LRU, f16 chunks and pyramids, absolute pooling and same-key coalescing.

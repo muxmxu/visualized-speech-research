@@ -6,6 +6,10 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+M1-T1's first implementation passed 37 targeted tests but semantic review 1 found twelve numerical, boundary, metadata, and admission defects.
+The Worker added regressions that failed on the prior implementation and repaired those findings; audit 2 passed 47 tests with device-availability skips.
+Semantic review 2 closed eleven findings and reproduced NaN percentile rows for all-zero Welch PSD, so the phase plan author added the sole T1 task amendment for exact zero-power and mixed-power dB-domain quantiles.
+D44 records explicit rejection of a full-spectrum interval beyond the stated 2^24 FFT cap instead of silent sample truncation.
 A2 froze the reviewed A1 DESIGN change in phase/arch, and independent phase audit and semantic review passed before the master squash.
 The phase and new master each passed 35 pytest tests, 18 Vitest tests, 19 one-worker Chromium tests, dependency installation, Ruff, typecheck, lint, and build.
 The new master architecture commit is `00fea16c7cbc17da95b82ffd95db467132fa756c`, and its DESIGN diff is byte-identical to the reviewed phase diff.
