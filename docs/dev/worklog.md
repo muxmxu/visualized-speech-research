@@ -6,6 +6,8 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+The M1-T7 browser run passed 64 of 65 cases, and the sole narrow screenshot failure reproduced with the same pixel values on accepted T6 because the Frequency Analysis dock clips the second spectrogram before the test samples it.
+H57 resumed the run, and H58 prefers available 6.2 models for subsequent dispatches.
 M1-T6 correction closed stale T-F ownership, idle E-tool hover and the missing ordinary-selection Play action, passed independent audit 2 with 35 Vitest and 27 Chromium cases plus semantic review 2, and was committed locally as `b419b77beeddcfedb00c3654506866c83a8a7d11`.
 M1-T6's first T-F selection tree passed 35 Vitest and 23 Chromium cases and independent mechanical audit, but semantic review 1 reproduced stale audition ownership after lane closure, lost E-tool hover and a missing ordinary-selection floating Play action, so correction is active.
 M1-T5 correction closed all three reproduced Frequency Analysis defects, passed independent audit 2 with 32 Vitest and nine Chromium cases and semantic review 2, and was committed locally as `20b42ec5e870a47035aa137e62540603a1709d77` by the D38 executor.
