@@ -6,6 +6,7 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+M1-T7 corrected floating Play activation during the PDF gesture and removed the broad export catch, passed independent audit 3 and semantic review 2 with eight PDF Chromium and 37 Vitest cases, and was committed locally as `7b1cdd3b997d0315af7868915a9455c9cd233163`.
 The M1-T7 browser run passed 64 of 65 cases, and the sole narrow screenshot failure reproduced with the same pixel values on accepted T6 because the Frequency Analysis dock clips the second spectrogram before the test samples it.
 H57 resumed the run, and H58 prefers available 6.2 models for subsequent dispatches.
 M1-T6 correction closed stale T-F ownership, idle E-tool hover and the missing ordinary-selection Play action, passed independent audit 2 with 35 Vitest and 27 Chromium cases plus semantic review 2, and was committed locally as `b419b77beeddcfedb00c3654506866c83a8a7d11`.
