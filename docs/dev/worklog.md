@@ -6,6 +6,7 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+The M1 phase integration passed 119 Python, 37 Vitest and 66 final Chromium tests, recorded CPU benchmarks, and passed independent audit and semantic review before the required master regression.
 M1-T7 corrected floating Play activation during the PDF gesture and removed the broad export catch, passed independent audit 3 and semantic review 2 with eight PDF Chromium and 37 Vitest cases, and was committed locally as `7b1cdd3b997d0315af7868915a9455c9cd233163`.
 The M1-T7 browser run passed 64 of 65 cases, and the sole narrow screenshot failure reproduced with the same pixel values on accepted T6 because the Frequency Analysis dock clips the second spectrogram before the test samples it.
 H57 resumed the run, and H58 prefers available 6.2 models for subsequent dispatches.
