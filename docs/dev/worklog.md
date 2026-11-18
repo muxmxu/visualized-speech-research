@@ -6,6 +6,10 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+The independent M1-T2 task plan bound the five-path write set, absolute-grid and cache oracles, and the cold ten-minute peak-RSS gate before Worker dispatch.
+M1-T1's sole task amendment produced four failing zero-power Welch PSD regressions on the previous tree and 51 passing targeted tests after the repair.
+Final independent audit 3 and semantic review 3 passed, with the two conditional device skip REVIEW lines allowed.
+The reviewed M1-T1 task branch commit is `eb1e595e43538a6719cc29a73c25f5c39a965b3c`, and M1-T2 planning follows that dependency.
 M1-T1's first implementation passed 37 targeted tests but semantic review 1 found twelve numerical, boundary, metadata, and admission defects.
 The Worker added regressions that failed on the prior implementation and repaired those findings; audit 2 passed 47 tests with device-availability skips.
 Semantic review 2 closed eleven findings and reproduced NaN percentile rows for all-zero Welch PSD, so the phase plan author added the sole T1 task amendment for exact zero-power and mixed-power dB-domain quantiles.
