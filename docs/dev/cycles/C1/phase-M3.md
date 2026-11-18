@@ -27,6 +27,10 @@ Focused check: `npm run typecheck && npm run lint && npm run build && npx playwr
 
 Merge accepted T1 and T2 in order. Integration write set beyond those accepted patches: `docs/DESIGN.md` (§21 append only) and `docs/acceptance/M3.md`. Follow the existing rules, protected-section, public API and full-suite checks on the final phase and master trees, including earlier milestones. Report the five exits below plus M3.C1–C3 with the test or command evidence, screenshots and any DESIGN deviations. There is no new §17 row assigned to M3. Cite the latest same-platform results when reporting and leave the all-row benchmark rerun to the C1 release phase. Deliver the single M3 milestone commit under `LIFECYCLE.md` Integration.
 
+### Integration amendment A1 — Narrow workspace Gain locator
+
+The integrated Chromium run reproduced an ambiguous selector in `frontend/tests/e2e/m1-spectrogram.spec.ts`: the existing lane Gain number input and the new Selection gain slider both match the prior substring lookup. Authorize one additional integration path, that test file, to select the same lane Gain control by exact name and spinbutton role. Retain every assertion and product byte. Verify the affected Chromium case, reuse all unchanged passing evidence, and record both results together.
+
 | Exit | Evidence and expected result |
 | --- | --- |
 | M3.1 | Parameterized unit cases for every §15 op. On a generated float32 sample array, check exact cut/delete/trim indices, clipboard and paste placement, zeroed/inserted silence, polarity, mean-channel mixdown, and analytic gain/normalize/fades. For spectral extraction, verify expected in-band audio alignment and unchanged source. Check bit-for-bit restoration after each undoable edit. |
