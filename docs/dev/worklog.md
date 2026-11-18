@@ -24,6 +24,8 @@ M1-T4 implementation was dispatched from that reviewed commit with H54's visual 
 The T4 Planner corrected one arithmetic auto80 example from [−100,−20] to [−90,−10] for lane maximum −12.25 dB, preserving the DESIGN formula and other plan content.
 The M1-T7 PDF task plan binds both visible plot surfaces, device-pixel cropping, independent JPEG and PDF parsing, full Chromium reader smoke and unchanged selection and network state, with dependency facts to bind after T4–T6.
 During T4 browser regression a duplicate-source second-lane deletion returned HTTP 500 because list removal compared Tensor-bearing dataclasses, and the Overall Planner inserted the regression-first two-file T4a backend fix before T5 without changing M1 acceptance.
+The first T4 frontend tree passed 29 Vitest and 32 Chromium tests and independent mechanical audit 1, with desktop and narrow screenshots, but semantic review 1 reproduced seven in-scope viewport, texture, hover, layout and cross-rate defects.
+The Controller returned all seven review-1 findings to the T4 Worker for regression-first correction before any task Git commit.
 M1-T2's amended tree passed final independent audit 3 and semantic review 3 with 65 tests, two allowed device-skip REVIEW lines and a cold peak RSS below 1.5 GiB.
 The reviewed M1-T2 task branch commit is `70d7f5c45e18b78777883bd1e6a2207704f6265f`, and M1-T3 planning follows it.
 An independent warm-cache diagnostic observed 0.102 and 1.966 seconds for 256-row and 1024-row log viewport requests, respectively; T8 retains the formal browser performance measurement.
