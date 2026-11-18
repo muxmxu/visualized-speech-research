@@ -6,6 +6,7 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+M2-T3 closed both semantic findings, passed 38 selected tests and two final independent reviews, and its four files were committed locally as `153cedca0c842d5a17c1f9b48fab09f255ab8a85`.
 M2-T3's first static plotting and skill installer tree passed 30 selected tests and an independent audit, while semantic review reproduced forbidden palette acceptance and a bfloat16 waveform conversion failure for correction.
 M2-T2 final integer-domain centering passed exact authenticated PCM red and green checks, 148 selected tests and independent reviews, and the approved seven files were committed locally as `dff75fbe4272d87d52627a20b0ea894ed10f2cd3`.
 M2-T2 correction passed 146 selected tests and mechanical audit, but review 2 reproduced midpoint precision loss for uint32 and uint64, so the sole task amendment bounds final centering and same-rate PCM regressions.
