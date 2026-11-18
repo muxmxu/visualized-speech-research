@@ -83,3 +83,37 @@ Return the frozen diff identity, exact changed paths, command results and device
 - [T2 final mechanical audit](M1-T2-audit-3.md)
 - [T2 final semantic review](M1-T2-review-3.md)
 - [LIFECYCLE](../../../../../LIFECYCLE.md)
+
+## T3 task amendment after semantic reviews 1 and 2
+
+[Semantic review 1](M1-T3-review-1.md) and [semantic review 2](M1-T3-review-2.md) are the two consecutive FAILs, and this is the sole task amendment allowed by the CODEX contract.
+[Mechanical audit 1](M1-T3-audit-1.md) and [mechanical audit 2](M1-T3-audit-2.md) identify the frozen trees and their check results.
+Limit the amendment to the finite chunk-bound overflow reproduced in review 2 and its regression, with amendment writes confined to `src/vsr/server/app.py` and `tests/test_pcm.py` inside the existing four-path task scope.
+Preserve the review-1 fixes for fractional-edge mask precision, extreme finite selection bounds and NOLA-valid narrow Gaussian synthesis, including the invalid physical-end overlap coverage.
+
+First add an authenticated regression in `tests/test_pcm.py` and record the failure against the review-2 route before modifying it, using the review-2 tree identity and recording each case that returns HTTP 500 with `OverflowError`.
+Use a generated mono FLOAT WAV of 24,000 samples at 8,000 Hz, every sample `0.75`, with lane offset zero and requested `sr=8000`.
+Use the complete valid Hann mask `selection_t0=0, selection_t1=3, f_lo=0, f_hi=4000, n_fft=16, win_length=16, window=hann, window_param=0` in each masked request.
+Build the reference through the existing independent whole-lane centered Hann STFT, unit mask and matching ISTFT, with source and destination rates equal.
+Compare the decoded nonempty output with the stipulated absolute destination slice of that reference, with strict maximum sample-wise error `<1e-6`.
+Require HTTP 200, framed f32 and `sr=8000` for each case, plus the exact slices, `first_sample` and shapes below.
+
+| Project `t0,t1` in seconds | Destination `[a,b)` | `first_sample` | Shape |
+|---|---|---|---|
+| `-1e308, 1` | `[0,8000)` | `0` | `[1,8000]` |
+| `0, 1e308` | `[0,24000)` | `0` | `[1,24000]` |
+| `-1e308, 1e308` | `[0,24000)` | `0` | `[1,24000]` |
+| `1, 1e308` | `[8000,24000)` | `8000` | `[1,16000]` |
+| `-1e308, -1` | `[0,0)` | `0` | `[1,0]` |
+| `4, 1e308` | `[24000,24000)` | `24000` | `[1,0]` |
+
+Repair the shared PCM endpoint conversion by restricting each destination position `(t-offset)*sr` to `[0,L]` before converting it to an integer, where `L = ceil(source_sample_count*sr/source_sr)` is the existing integer destination length.
+This orders clipping before nearest-sample rounding so extreme finite query bounds whose scaled positions overflow to signed infinity saturate at the correct side of the lane.
+Retain the existing nearest-sample rounding for in-lane positions, the `end >= start` invariant and the empty payload with `first_sample=start` when the clipped bounds coincide.
+Apply the shared conversion to ordinary and masked requests and preserve the existing ordinary PCM samples, offset, channel handling and resampling behavior.
+Keep selection time and frequency geometry independent of the returned chunk bounds and preserve the existing rejection of nonfinite or unordered query bounds.
+
+Rerun the original task checks and retain all original assertions, thresholds, off-phase seams, lane-edge tests, device coverage and the review-1 regressions.
+Obtain a fresh independent mechanical audit 3 on the frozen amended tree with the original check commands, path and protection checks, and exact diff identity.
+Obtain a fresh independent focused semantic review 3 covering the finite chunk-bound reproductions, destination sample and empty metadata behavior, preserved review-1 fixes and rule dispositions.
+Any further semantic FAIL makes T3 BLOCKED under the CODEX review cap and blocks the D38 handoff.

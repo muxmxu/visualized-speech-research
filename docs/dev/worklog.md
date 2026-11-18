@@ -14,6 +14,8 @@ The M1-T4 task plan binds fourteen frontend files, H54 workspace repairs, real C
 M1-T3's first code attempt passed 103 Python tests with 36 device skips, and independent mechanical audit 1 passed on the same four-file tree.
 Independent semantic review 1 failed with reproduced fractional-edge chunk dependence, an extreme finite time 500, and narrow Gaussian physical-edge precision drift.
 The Controller returned those three cases to the T3 Worker for failing regressions and correction before any task Git commit.
+M1-T3's corrected tree passed 106 Python tests and independent audit 2, while semantic review 2 closed all three prior issues and reproduced a finite chunk-bound overflow before lane clipping.
+The T3 Task Planner appended the contract's sole task amendment for six extreme finite chunk bounds, preserving ordinary PCM and the prior numerical assertions.
 M1-T2's amended tree passed final independent audit 3 and semantic review 3 with 65 tests, two allowed device-skip REVIEW lines and a cold peak RSS below 1.5 GiB.
 The reviewed M1-T2 task branch commit is `70d7f5c45e18b78777883bd1e6a2207704f6265f`, and M1-T3 planning follows it.
 An independent warm-cache diagnostic observed 0.102 and 1.966 seconds for 256-row and 1024-row log viewport requests, respectively; T8 retains the formal browser performance measurement.
