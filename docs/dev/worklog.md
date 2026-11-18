@@ -6,6 +6,7 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+M3 is delivered as `7cf8df9c5ee64abfbbdc9aa0b355190d1c8d5dc8` with 260 Python and 37 Vitest passes plus 75 distinct Chromium passes across the original run and the one targeted test-only selector repair, and main differs from the reviewed phase tree only in the A1 plan record.
 M3-T2 passed real Chromium spectral delete, undo, redo and Save As, passed both independent reviews, and was committed at `570668b42c855dd83bcef05304dd528d84d6c228` with exact approved tree equality.
 M3-T1 passed 27 selected edit and atomic save tests and independent review, was committed as `8c72a7c2adce767a8cc65132e4ac816d5a03f92d`, and was bound to the parallel T2 worktree without changing the frontend files.
 M2 is delivered as `600152a00bfe6981c8d9ab0a28ba12cdc3830c42` after 233 Python, 37 Vitest and 74 Chromium passes on the integrated phase; exact blob and mode equivalence transfers that same evidence to master without duplicate runtime checks under H59.
