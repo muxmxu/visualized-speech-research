@@ -5,12 +5,12 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { notifications } from '@mantine/notifications';
 import { Loader, Modal } from '@mantine/core';
-import { IconPlayerPlay, IconPlayerPause, IconPlayerStop, IconRepeat, IconCursorText, IconArrowsMove, IconDots } from '@tabler/icons-react';
-import { ApiError, body, editLane, json, request, saveLane, stepHistory, token } from './api/client';
+import { IconPlayerPlay, IconPlayerPause, IconPlayerStop, IconPlayerRecord, IconRepeat, IconCursorText, IconArrowsMove, IconDots } from '@tabler/icons-react';
+import { ApiError, armRecording, audioDevices, body, calibrateRecording, editLane, json, mixdown, request, saveLane, startRecording, stepHistory, stopRecording, token } from './api/client';
 import { decodeFrame } from './api/frame';
 import type { FrameArray } from './api/frame';
 import { laneDuration } from './api/types';
-import type { Directory, EditOperation, Lane, LaneEdit, OpenResult, SaveSubtype, SessionLane, Settings, TensorIntake } from './api/types';
+import type { AudioDevices, Directory, EditOperation, Lane, LaneEdit, MixdownRequest, OpenResult, RecordMapping, RecordMeter, RecordPreview, RecordState, RecordingWarning, SaveSubtype, SessionLane, Settings, TensorIntake } from './api/types';
 import { drawWaveform, waveformUpdates } from './render/waveform';
 import { fit, pan, zoom, formatTime, yToFrequency } from './state/viewport';
 import { SpectralLabels, SpectralLane } from './lanes/SpectralLane';
@@ -20,6 +20,8 @@ import { EditMenu, SelectionActions, type SelectionCommands } from './lanes/Sele
 import type { TfSelection as TfSelectionState } from './state/tfSelection';
 import { Display } from './panels/Display';
 import { FrequencyAnalysis } from './panels/FrequencyAnalysis';
+import { initialRecordSetup, InputMeter, MixdownForm, RecordingPanel, RecordingWave } from './panels/Record';
+import type { PreviewFrame, RecordSetup } from './panels/Record';
 import { displayUnit, featureAxisLabel, frequencyViewport, viewForFeature, viewFromPreset, viewScale } from './state/spectralViews';
 import { TensorInterpretation } from './panels/TensorInterpretation';
 import type { Preset, SpectralView, ViewConfig, ViewPatch } from './state/spectralViews';
@@ -32,6 +34,13 @@ import { exposePlayback, exposeSpectra } from './audio/testHook';
 
 function report(error: unknown) { notifications.show({ title: 'Request failed', message: String(error), color: 'red' }); }
 function run(action: Promise<unknown>) { void action.catch(report); }
+
+const idleRecording: RecordState = { type: 'record_state', state: 'idle', mapping: [], start_time: null, notice: null };
+const warningLabels: Record<RecordingWarning['type'], string> = {
+  input_overflow: 'Input overflow', output_underflow: 'Output underflow',
+};
+type WorkspaceEvent = RecordState | RecordMeter | { type: 'lanes_changed' | 'job_progress' | 'plugins_changed' } |
+  { type: 'error'; error: string; detail: string; traceback: string | null };
 
 type Menu = { x: number; y: number } & ({ kind: 'lane'; lane: Lane } | { kind: 'time'; lane: Lane } | { kind: 'frequency' } | { kind: 'empty' });
 const editFields = {
@@ -223,13 +232,24 @@ export default function App() {
   const widthRef = useRef(width); widthRef.current = width;
   const [tool, setTool] = useState<'time' | 'move' | 'frequency'>('time');
   const [tfSelection, setTfSelection] = useState<TfSelectionState | null>(null);
+  const showFrequencyMeasurements = tool === 'frequency' || tfSelection !== null;
   const [selection, setSelection] = useState<[number, number] | null>(null); const [playhead, setPlayhead] = useState(0);
   const [timeGroup, setTimeGroup] = useState<string[]>([]);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [editDialog, setEditDialog] = useState<EditDialog | null>(null);
   const [saveDialog, setSaveDialog] = useState<{ lane: Lane; as: boolean } | null>(null);
   const [shortcutHelp, setShortcutHelp] = useState(false);
+  const [mixdownDialog, setMixdownDialog] = useState<{ interval: [number, number]; sr: number } | null>(null);
+  const [devices, setDevices] = useState<AudioDevices | null>(null);
+  const [recordSetup, setRecordSetup] = useState(initialRecordSetup);
+  const [recordState, setRecordState] = useState(idleRecording);
+  const recordStateRef = useRef(idleRecording);
+  const recordNotices = useRef(new Set<RecordState['notice']>());
+  const [meter, setMeter] = useState<RecordMeter | null>(null);
+  const [previews, setPreviews] = useState<Partial<Record<number, PreviewFrame[]>>>({});
+  const savedTakeLane = useRef<string | null>(null);
   const operation = useRef(false);
+  const recordingTransition = useRef(false);
   const [working, setWorking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [directory, setDirectory] = useState<Directory | null>(null); const [path, setPath] = useState('~');
@@ -355,6 +375,27 @@ export default function App() {
   useEffect(() => { playback.current?.setLoop(loop); }, [loop]);
   useEffect(() => () => { playback.current?.stop(); void playback.current?.context.close(); }, []);
   const refresh = useCallback(async () => { const result = await json<{ lanes: SessionLane[] }>('/session'); setLanes(result.lanes); }, []);
+  const acceptRecordState = useCallback((state: RecordState) => {
+    const previous = recordStateRef.current;
+    recordStateRef.current = state;
+    setRecordState(state);
+    if (state.state === 'idle') setMeter(null);
+    if (state.state !== 'recording') {
+      setPreviews({});
+      recordNotices.current.clear();
+    } else if (previous.state !== 'recording') {
+      setPlayhead(state.start_time as number);
+    }
+    if (!state.notice || recordNotices.current.has(state.notice)) return;
+    recordNotices.current.add(state.notice);
+    notifications.show({
+      color: 'yellow', autoClose: false,
+      title: state.notice === 'microphone_permission' ? 'Check microphone permission' : 'Input and output clocks may drift',
+      message: state.notice === 'microphone_permission'
+        ? 'The first second of input was silent. Check the recording device and microphone permission on the server.'
+        : 'The input and output devices are different. Their clocks may drift during a long overdub.',
+    });
+  }, []);
   const browse = useCallback(async (value: string) => { const result = await json<Directory>(`/fs/list?path=${encodeURIComponent(value)}`); setDirectory(result); setPath(result.path); }, []);
   useEffect(() => {
     const launchId = new URLSearchParams(location.hash.slice(1)).get('open');
@@ -368,10 +409,42 @@ export default function App() {
       }));
     }
     run(browse('~')); run(json<Settings>('/settings').then(setSettings));
+    run(audioDevices().then(result => {
+      setDevices(result);
+      const input = result.devices.find(device => device.id === result.default_input);
+      if (input) setRecordSetup(old => ({ ...old, sr: Math.round(input.default_samplerate) }));
+    }));
     const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws?token=${encodeURIComponent(token)}`);
-    socket.onmessage = event => { if ((JSON.parse(String(event.data)) as { type: string }).type === 'lanes_changed') run(refresh()); };
+    socket.binaryType = 'arraybuffer';
+    socket.onmessage = event => {
+      const data: unknown = event.data;
+      if (data instanceof ArrayBuffer) {
+        const origin = recordStateRef.current.start_time;
+        if (origin === null) return;
+        const { arrays, header } = decodeFrame(data);
+        if (header.type !== 'record_preview') return;
+        const packet = arrays as FrameArray;
+        const frame: PreviewFrame = { ...header as unknown as RecordPreview, shape: packet.shape, data: packet.data as Float32Array };
+        setPreviews(old => ({ ...old, [frame.target]: [...(old[frame.target] ?? []), frame] }));
+        const position = origin + (frame.first_sample + frame.sample_count) / frame.sr;
+        setPlayhead(position);
+        setView(old => {
+          const span = widthRef.current * old.secondsPerPx;
+          return span > 0 && (position < old.t0 || position > old.t0 + span) ? { ...old, t0: Math.floor(position / span) * span } : old;
+        });
+        return;
+      }
+      const message = JSON.parse(data as string) as WorkspaceEvent;
+      if (message.type === 'lanes_changed') run(refresh());
+      else if (message.type === 'record_state') acceptRecordState(message);
+      else if (message.type === 'record_meter') setMeter(message);
+      else if (message.type === 'error') notifications.show({
+        title: message.error, message: message.traceback ? `${message.detail}\n${message.traceback}` : message.detail,
+        color: 'red', autoClose: false,
+      });
+    };
     return () => socket.close();
-  }, [refresh, browse, queueTensors]);
+  }, [refresh, browse, queueTensors, acceptRecordState]);
   useEffect(() => {
     const element = host.current; if (!element) return;
     const dock = new DockviewComponent(element, { theme: themeDark, createComponent: options => { const panel = document.createElement('div'); panel.style.height = '100%'; return { element: panel, init: () => { setTargets(old => ({ ...old, [options.name]: panel })); } }; } });
@@ -395,6 +468,12 @@ export default function App() {
     }
     if (!dock.api.getPanel('frequency-analysis')) {
       dock.addPanel({ id: 'frequency-analysis', component: 'frequency-analysis', title: 'Frequency Analysis', position: { referencePanel: 'lanes', direction: 'below' }, initialHeight: 220 });
+      localStorage.setItem('vsr-layout', JSON.stringify(dock.toJSON()));
+    }
+    if (!dock.api.getPanel('record')) {
+      const previous = dock.api.getPanel('frequency-analysis')?.group.activePanel;
+      dock.addPanel({ id: 'record', component: 'record', title: 'Record', position: { referencePanel: 'frequency-analysis', direction: 'within' } });
+      previous?.api.setActive();
       localStorage.setItem('vsr-layout', JSON.stringify(dock.toJSON()));
     }
     const nameTabs = () => element.querySelectorAll<HTMLElement>('.dv-default-tab-content').forEach(tab => { tab.title = tab.innerText; });
@@ -423,6 +502,7 @@ export default function App() {
   const currentTensor = tensorIntakes.at(0);
   const reorder = (index: number, direction: number) => { const ids = lanes.map(lane => lane.id); const other = index + direction; if (other < 0 || other >= ids.length) return; [ids[index], ids[other]] = [ids[other], ids[index]]; run(json('/lanes/reorder', body({ ids }))); };
   const togglePlay = () => {
+    if (recordStateRef.current.state === 'recording' || recordingTransition.current) return;
     if (playback.current?.playing) { const position = playback.current.position; playback.current.stop(); setPlayhead(position); setPlaying(false); return; }
     if (!audioLanes.length) return;
     const player = playback.current ?? new Playback(); playback.current = player;
@@ -446,6 +526,91 @@ export default function App() {
       window.clearTimeout(timer); operation.current = false; setWorking(false); setBusy(false);
     });
   };
+  const { state: takeState, mapping, start_time: takeOrigin } = recordState;
+  const recording = takeState === 'recording';
+  const input = devices?.devices.find(device => device.id === (recordSetup.input_device ?? devices.default_input) && device.max_input_channels > 0);
+  const output = devices?.devices.find(device => device.id === (recordSetup.output_device ?? devices.default_output) && device.max_output_channels > 0);
+  const canRecord = Boolean((mapping.length ? input : devices?.devices.find(device => device.id === devices.default_input && device.max_input_channels > 0))
+    && (!recordSetup.overdub || output));
+  const arm = async (next: RecordMapping[], setup = recordSetup) => {
+    const { input_device, sr, blocksize } = setup;
+    acceptRecordState(await armRecording({ input_device, sr, blocksize, mapping: next }));
+  };
+  const changeSetup = (setup: RecordSetup) => {
+    if (setup.input_device !== recordSetup.input_device && mapping.length) {
+      const device = devices?.devices.find(item => item.id === (setup.input_device ?? devices.default_input));
+      const next = mapping.filter(target => target.channels.every(channel => channel < (device?.max_input_channels ?? 0)));
+      perform(async () => {
+        await arm(next, setup);
+        setRecordSetup(setup);
+      });
+    } else setRecordSetup(setup);
+  };
+  const toggleArm = (lane: Lane) => {
+    const armed = mapping.some(target => target.lane === lane.id);
+    dockRef.current?.api.getPanel('record')?.api.setActive();
+    const channel = Math.min(input?.max_input_channels ? input.max_input_channels - 1 : 0, channels[lane.id] ?? 0);
+    perform(() => arm(armed ? mapping.filter(target => target.lane !== lane.id) : [...mapping, { lane: lane.id, channels: [channel] }]));
+  };
+  const calibrate = () => perform(async () => {
+    const { input_device, output_device, sr, blocksize } = recordSetup;
+    const result = await calibrateRecording({ input_device, output_device, sr, blocksize });
+    setRecordSetup(old => ({ ...old, latency_ms: result.latency_ms }));
+  });
+  const stopTake = () => perform(async () => {
+    const { lanes: recorded } = await stopRecording();
+    setPreviews({});
+    setLanes(old => [...old.map(lane => recorded.find(next => next.id === lane.id) ?? lane), ...recorded.filter(lane => !old.some(existing => existing.id === lane.id))]);
+    savedTakeLane.current = recorded[0].id;
+    const warnings = recorded.flatMap(lane => lane.record_warnings.map(warning => `${lane.name} · ${warning.time_s.toFixed(3)} s · ${warningLabels[warning.type]}`));
+    if (warnings.length) notifications.show({ title: 'Recording warnings', message: warnings.join('\n'), color: 'yellow', autoClose: false });
+  });
+  const toggleRecord = () => {
+    if (recording) { stopTake(); return; }
+    if (!canRecord) return;
+    perform(async () => {
+      recordingTransition.current = true;
+      const start_time = playback.current?.playing ? playback.current.position : playhead;
+      playback.current?.stop(start_time);
+      setPlaying(false);
+      setPlayhead(start_time);
+      const { input_device, output_device, sr, blocksize, subtype, overdub, latency_ms } = recordSetup;
+      try {
+        acceptRecordState(await startRecording({
+          input_device: mapping.length ? input_device : null, sr, blocksize, subtype, mapping, overdub, latency_ms, start_time,
+          ...(overdub && output_device !== null ? { output_device } : {}),
+        }));
+      } finally {
+        recordingTransition.current = false;
+      }
+    });
+  };
+  useLayoutEffect(() => {
+    const id = savedTakeLane.current;
+    if (id === null) return;
+    const recorded = views.find(item => item.laneId === id);
+    if (!recorded) return;
+    savedTakeLane.current = null;
+    setSelected(id);
+    setSelectedView(recorded.id);
+    plotHost.current?.querySelector(`[data-view-id="${CSS.escape(recorded.id)}"]`)?.scrollIntoView({ block: 'nearest' });
+  });
+  const newPreviews = Object.entries(previews).filter(([target]) => mapping[Number(target)]?.lane == null);
+  const firstNewPreview = newPreviews.at(0)?.[0];
+  useLayoutEffect(() => {
+    if (firstNewPreview !== undefined) plotHost.current?.querySelector('.record-new-preview')?.scrollIntoView({ block: 'nearest' });
+  }, [firstNewPreview]);
+  const mixInterval = tfSelection && tfSelection.t1 > tfSelection.t0 ? [tfSelection.t0, tfSelection.t1] as [number, number]
+    : hasTimeSelection ? selection : [start, end] as [number, number];
+  const openMixdown = () => setMixdownDialog({ interval: mixInterval, sr: activeAudio?.sr ?? audioLanes[0].sr });
+  const writeMix = (settings: MixdownRequest) => perform(async () => {
+    const result = await mixdown(settings);
+    setMixdownDialog(null);
+    notifications.show({
+      title: result.clipping ? 'Mixdown exceeds 0 dBFS' : 'Mixdown saved',
+      message: result.path, color: result.clipping ? 'yellow' : 'green', autoClose: !result.clipping,
+    });
+  });
   const edit = (lane: Lane, op: EditOperation, params?: LaneEdit['params']) => {
     const requiresTime = op === 'delete' || op === 'cut' || op === 'trim' || op === 'spectral_extract';
     if (requiresTime && !hasTimeSelection) return;
@@ -539,7 +704,9 @@ export default function App() {
         {current.kind === 'empty' && menuButton('Show all', () => setView(fit(start, end, width)), '0')}
       </>;
     }
-    return <EditMenu x={current.x} y={current.y} dismiss={dismissMenu}>{items}</EditMenu>;
+    return <EditMenu x={current.x} y={current.y} dismiss={dismissMenu}>{items}
+      {menuButton('Mixdown…', openMixdown, undefined, !audioLanes.length || working)}
+    </EditMenu>;
   };
   useEffect(() => {
     if (!menu) return;
@@ -552,7 +719,7 @@ export default function App() {
   useLayoutEffect(() => {
     const handler = (event: KeyboardEvent) => {
       if (event.key === 'Escape') dismissMenu();
-      if (tensorIntakes.length || editDialog || saveDialog || shortcutHelp || exporting || event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
+      if (tensorIntakes.length || editDialog || saveDialog || mixdownDialog || shortcutHelp || exporting || event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
       const key = event.key.toLowerCase();
       if (event.metaKey || event.ctrlKey) {
         if (key === 'z') { event.preventDefault(); step(event.shiftKey ? 'redo' : 'undo'); }
@@ -633,6 +800,8 @@ export default function App() {
   const naturalRange = spectralRange('auto80', activePackets, activeIsRaw);
   const panels: Record<string, React.ReactNode> = {
     'frequency-analysis': <FrequencyAnalysis lanes={audioLanes} views={audioViews} selectedView={selectedView} channels={channels} selection={selection} playhead={playhead} hoverTime={analysisHover} tfSelection={tfSelection} />,
+    record: <RecordingPanel devices={devices} lanes={audioLanes} setup={recordSetup} mapping={mapping}
+      disabled={working || recording} changeSetup={changeSetup} changeMapping={next => perform(() => arm(next))} calibrate={calibrate} />,
     display: <Display lane={active} range={activeView && activeView.range !== 'auto80' ? activeView.range : naturalRange} naturalRange={naturalRange}
       view={activeView} presets={active?.kind === 'audio' ? presets[active.sr] : {}} change={changeActive} applyPreset={selectPreset} applyAll={() => {
       if (!activeView || !active) return;
@@ -664,7 +833,11 @@ export default function App() {
       }
     }} />,
     files: <div className="panel files-panel"><form onSubmit={event => { event.preventDefault(); run(browse(path)); }}><button type="button" title="Parent directory" onClick={() => run(browse(`${path}/..`))}>..</button><input aria-label="Directory" title={path} value={path} onChange={event => setPath(event.target.value)} /><button title="Browse">Go</button></form><div className="file-list">{directory?.entries.map(entry => <button key={entry.name} title={entry.name} onDoubleClick={() => { const target = `${directory.path}/${entry.name}`; run(entry.is_dir ? browse(target) : open(target)); }} onKeyDown={event => { if (event.key === 'Enter' || event.code === 'Space') { event.preventDefault(); event.stopPropagation(); const target = `${directory.path}/${entry.name}`; run(entry.is_dir ? browse(target) : open(target)); } }}>{entry.is_dir ? '▸ ' : '♪ '}{entry.name}</button>)}</div><h4>Recent</h4>{recent.map(item => <button className="file" key={item} title={item} onClick={() => run(open(item))}>{item}</button>)}</div>,
-    properties: <div className="panel">{active ? <><h3>{active.name}</h3><p>Sample rate: {active.sr} Hz</p><p>{active.kind === 'audio' ? `Channels: ${active.channels}` : `Rows: ${active.rows} · ${active.frame_rate.toFixed(2)} frames/s`}</p><p>Duration: {laneDuration(active).toFixed(3)} s</p><p>Source: {active.source}</p></> : 'Select a lane'}</div>,
+    properties: <div className="panel">{active ? <><h3>{active.name}</h3><p>Sample rate: {active.sr} Hz</p><p>{active.kind === 'audio' ? `Channels: ${active.channels}` : `Rows: ${active.rows} · ${active.frame_rate.toFixed(2)} frames/s`}</p><p>Duration: {laneDuration(active).toFixed(3)} s</p><p>Source: {active.source}</p>
+      {active.kind === 'audio' && active.record_warnings.length > 0 && <>
+        <h4>Recording warnings</h4>
+        <ul className="record-warnings">{active.record_warnings.map((warning, i) => <li key={i}>{warning.time_s.toFixed(3)} s · {warningLabels[warning.type]}</li>)}</ul>
+      </>}</> : 'Select a lane'}</div>,
     settings: <div className="panel">{settings && <><label>Compute device <select aria-label="Compute device" value={settings.compute_device} onChange={event => run(json<Settings>('/settings', body({ compute_device: event.target.value })).then(setSettings))}><option value="auto">auto</option>{settings.available_devices.map(device => <option key={device}>{device}</option>)}</select></label><p>Current: {settings.compute_device}</p><p>Self-check: {settings.self_check ? JSON.stringify(settings.self_check) : 'failed'}</p>{settings.reason && <p role="alert">{settings.reason}</p>}</>}</div>,
     lanes: <div className="lanes" ref={plotHost} style={{ '--scrollbar-width': `${scrollbarWidth}px` } as React.CSSProperties} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); for (const file of event.dataTransfer.files) run(json<OpenResult>(`/upload?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file }).then(result => acceptOpen(result))); }}><div className={`timeline ${width < 350 ? 'compact' : ''}`}>{Array.from({ length: 6 }, (_, i) => <span key={i} style={{ left: `calc(var(--plot-left) + (100% - var(--plot-left) - var(--plot-right) - var(--scrollbar-width)) * ${i / 5})`, transform: i === 0 ? 'none' : i === 5 ? 'translateX(-100%)' : 'translateX(-50%)' }}>{(view.t0 + width * view.secondsPerPx * i / 5).toFixed(tickPrecision)}</span>)}</div><div className="overview" onPointerDown={event => { const rect = event.currentTarget.getBoundingClientRect(); const x = event.clientX - rect.left; const left = (view.t0-start) / extent * rect.width; const right = (view.t0 + width * view.secondsPerPx-start) / extent * rect.width; const mode = Math.abs(x - left) < 6 ? 'start' : Math.abs(x - right) < 6 ? 'end' : 'move'; overviewDrag.current = { x: event.clientX, view, mode }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { const drag = overviewDrag.current; if (!drag) return; const delta = (event.clientX - drag.x) / event.currentTarget.clientWidth * extent; const oldEnd = drag.view.t0 + width * drag.view.secondsPerPx; setView(drag.mode === 'move' ? { ...drag.view, t0: drag.view.t0 + delta } : drag.mode === 'start' ? fit(Math.min(oldEnd - 0.001, drag.view.t0 + delta), oldEnd, width) : fit(drag.view.t0, Math.max(drag.view.t0 + 0.001, oldEnd + delta), width)); }} onPointerUp={() => { overviewDrag.current = null; }}>{longest && <OverviewWave lane={longest} start={start} end={end} />}<div className="overview-box" style={{ left: `${(view.t0-start) / extent * 100}%`, width: `${width * view.secondsPerPx / extent * 100}%` }} /></div><canvas className="spectral-canvas" ref={glCanvas} /><div className="lane-list" onContextMenu={event => {
       event.preventDefault(); setMenu({ kind: 'empty', x: event.clientX, y: event.clientY });
@@ -673,6 +846,8 @@ export default function App() {
       if (!lane) return null;
       const index = lanes.indexOf(lane);
       const audio = lane.kind === 'audio' ? lane : undefined;
+      const target = mapping.findIndex(item => item.lane === lane.id);
+      const preview = target < 0 ? undefined : previews[target];
       const audioConfig = config.kind === 'audio' ? config : undefined;
       const mode = audioConfig?.mode ?? 'S';
       const split = audioConfig?.split ?? 0;
@@ -723,7 +898,9 @@ export default function App() {
           <div>{lane.sr} Hz · {lane.kind === 'audio' ? `${lane.channels} ch` : `${lane.rows} rows`} · {laneDuration(lane).toFixed(2)} s</div>
           <div className="lane-actions">
             {audio && <><button title="Mute" className={audio.mute ? 'active' : ''} onClick={() => patch(lane.id, { mute: !audio.mute })}>M</button>
-              <button title="Solo" className={audio.solo ? 'active' : ''} onClick={() => patch(lane.id, { solo: !audio.solo })}>S</button></>}
+              <button title="Solo" className={audio.solo ? 'active' : ''} onClick={() => patch(lane.id, { solo: !audio.solo })}>S</button>
+              <button className="record-arm" title="Arm lane for recording" aria-label={`Arm ${lane.name} for recording`}
+                aria-pressed={target >= 0} disabled={working || recording || !input} onClick={() => toggleArm(audio)}>R</button></>}
             <button title="Move up" onClick={() => reorder(index, -1)}>↑</button>
             <button title="Move down" onClick={() => reorder(index, 1)}>↓</button>
             <button title="Add view" onClick={() => {
@@ -734,9 +911,13 @@ export default function App() {
             {audio && <button title="Edit and save lane" aria-label="Edit and save lane" onClick={event => {
               const box = event.currentTarget.getBoundingClientRect(); openLaneMenu(box.left, box.bottom);
             }}><IconDots size={13} /></button>}
-            <button title="Close lane" onClick={() => {
+            <button title="Close lane" disabled={target >= 0 && (recording || working)} onClick={() => {
               if (views.filter(item => item.laneId === lane.id).length > 1) setViews(old => old.filter(item => item.id !== config.id));
-              else if (!audio?.dirty || window.confirm(`Discard unsaved changes to ${lane.name}?`)) run(request(`/lanes/${lane.id}`, { method: 'DELETE' }));
+              else if (!audio?.dirty || window.confirm(`Discard unsaved changes to ${lane.name}?`)) {
+                const closeLane = () => request(`/lanes/${lane.id}`, { method: 'DELETE' });
+                if (target < 0) run(closeLane());
+                else perform(async () => { await arm(mapping.filter(item => item.lane !== lane.id)); await closeLane(); });
+              }
             }}>×</button>
           </div>
           {audio && <>
@@ -768,6 +949,7 @@ export default function App() {
                 menu={menu?.kind === 'frequency' && tfSelection?.viewId === config.id && tfSelection.channel === channel && renderMenu(menu)} />}
             </SpectralLane>)}
           </div>}
+          {takeOrigin !== null && preview && <RecordingWave frames={preview} origin={takeOrigin} view={view} label={lane.name} />}
         </LanePlot>
         <div className={`colorbar-gutter${labelColorbar ? ' labeled-colorbar' : ''}`}>{config.colorbar && mode !== 'W' && <>
           <div className="colorbar" style={{ top: mode === 'W+S' ? `${split * 100}%` : 0, background: `linear-gradient(to top, ${Array.from({ length: 16 }, (_, index) => {
@@ -783,9 +965,17 @@ export default function App() {
           if (event.currentTarget.hasPointerCapture(event.pointerId)) update({ height: Math.max(80, Number(event.currentTarget.dataset.height) + event.clientY - Number(event.currentTarget.dataset.start)) });
         }} />
       </div>;
-    })}</div></div>,
+    })}{takeOrigin !== null && newPreviews.map(([target, frames]) => frames && <div className="lane record-new-preview" key={target}>
+      <div className="lane-header"><strong>New lane</strong><div>Input {(mapping[Number(target)]?.channels[0] ?? 0) + 1}</div></div>
+      <div className="frequency-axis" />
+      <div className="wave"><RecordingWave frames={frames} origin={takeOrigin} view={view} label={`new lane ${Number(target) + 1}`} onWidth={setWidth} /></div>
+      <div className="colorbar-gutter" />
+    </div>)}</div></div>,
   };
-  return <><header><strong>vsr</strong><div className="toolbar-group"><button title="Play / pause" disabled={!audioLanes.length} onClick={togglePlay}>{playing ? <><IconPlayerPause size={14} />Pause</> : <><IconPlayerPlay size={14} />Play</>}</button><button title="Stop" onClick={() => { playback.current?.stop(tfSelection?.t0 ?? (selection ? selection[0] : 0)); setPlayhead(tfSelection?.t0 ?? (selection ? selection[0] : 0)); setPlaying(false); }}><IconPlayerStop size={14} />Stop</button><button title="Loop (L)" className={loop ? "active" : ""} aria-pressed={loop} onClick={() => setLoop(value => !value)}><IconRepeat size={14} />Loop</button></div><div className="toolbar-group"><button title="Export visible area to PDF" aria-label="Export visible area to PDF" aria-pressed={exporting} onClick={() => { if (exporting) finishExport(); else { exportRef.current = true; if (hoverFrame.current !== null) { cancelAnimationFrame(hoverFrame.current); hoverFrame.current = null; } setExporting(true); } }}>PDF</button><button title="Time selection (T)" className={tool === 'time' ? 'active' : ''} aria-pressed={tool === 'time'} onClick={() => setTool('time')}><IconCursorText size={14} />T</button><button title="Time-frequency selection (E)" className={tool === 'frequency' ? 'active' : ''} aria-pressed={tool === 'frequency'} onClick={() => setTool('frequency')}>E</button><button title="Move lane (V)" className={tool === 'move' ? 'active' : ''} aria-pressed={tool === 'move'} onClick={() => setTool('move')}><IconArrowsMove size={14} />V</button></div><div className={`toolbar-group measurements ${tfSelection ? "tf-measurements" : ""}`}><span>Playhead {formatTime(playhead)}</span>{(['Start', 'End', 'Duration'] as const).map((label, i) => <label key={label}>{label} <TimeInput label={label} value={tfSelection ? (i === 2 ? tfSelection.t1 - tfSelection.t0 : i === 0 ? tfSelection.t0 : tfSelection.t1) : selection ? (i === 2 ? selection[1] - selection[0] : selection[i]) : 0} onChange={n => { if (tfSelection) { const fixed = i === 0 ? tfSelection.t1 : tfSelection.t0; const moving = i === 2 ? fixed + n : n; const t0 = Math.min(fixed, moving); const t1 = Math.max(fixed, moving); setTfSelection({ ...tfSelection, t0, t1 }); return i === 2 ? t1 - t0 : i === 0 ? t0 : t1; } const current = selection ?? [0, 0]; const fixed = i === 0 ? current[1] : current[0]; const moving = i === 2 ? fixed + n : n; const next: [number, number] = [Math.min(fixed, moving), Math.max(fixed, moving)]; setSelection(next); return i === 2 ? next[1] - next[0] : next[i]; }} /></label>)}{tfSelection && (['Low Hz', 'High Hz'] as const).map((label, i) => <label key={label}>{label} <TimeInput label={label} value={i === 0 ? tfSelection.f_lo : tfSelection.f_hi} onChange={n => { const source = lanes.find(lane => lane.id === tfSelection.laneId); const bounded = Math.max(0, Math.min(source ? source.sr / 2 : n, n)); const next = i === 0 ? (bounded < tfSelection.f_hi ? { ...tfSelection, f_lo: bounded } : tfSelection) : (bounded > tfSelection.f_lo ? { ...tfSelection, f_hi: bounded } : tfSelection); setTfSelection(next); return i === 0 ? next.f_lo : next.f_hi; }} /></label>)}</div></header><div ref={host} className="dock" />{Object.entries(targets).map(([id, element]) => createPortal(panels[id], element, id))}{currentTensor && <TensorInterpretation key={currentTensor.id} tensor={currentTensor.tensor} close={closeTensor} opened={file => { if (currentTensor.remember) remember(file); closeTensor(); }} />}{exporting && <ExportSelection finish={finishExport} />}
+  return <><header><strong>vsr</strong><div className="toolbar-group"><button title="Play / pause" disabled={!audioLanes.length || recording} onClick={togglePlay}>{playing ? <><IconPlayerPause size={14} />Pause</> : <><IconPlayerPlay size={14} />Play</>}</button><button title="Stop" disabled={recording && working} onClick={() => { if (recording) { stopTake(); return; } playback.current?.stop(tfSelection?.t0 ?? (selection ? selection[0] : 0)); setPlayhead(tfSelection?.t0 ?? (selection ? selection[0] : 0)); setPlaying(false); }}><IconPlayerStop size={14} />Stop</button><button title="Loop (L)" className={loop ? "active" : ""} aria-pressed={loop} onClick={() => setLoop(value => !value)}><IconRepeat size={14} />Loop</button><button className="record-transport" aria-pressed={recording} title={recording ? 'Stop recording' : 'Start recording'}
+      disabled={working || (!recording && !canRecord)} onClick={toggleRecord}><IconPlayerRecord size={14} />{recording ? 'Stop Rec' : 'Record'}</button></div><div className="toolbar-group"><button title="Export visible area to PDF" aria-label="Export visible area to PDF" aria-pressed={exporting} onClick={() => { if (exporting) finishExport(); else { exportRef.current = true; if (hoverFrame.current !== null) { cancelAnimationFrame(hoverFrame.current); hoverFrame.current = null; } setExporting(true); } }}>PDF</button><button title="Time selection (T)" className={tool === 'time' ? 'active' : ''} aria-pressed={tool === 'time'} onClick={() => setTool('time')}><IconCursorText size={14} />T</button><button title="Time-frequency selection (E)" className={tool === 'frequency' ? 'active' : ''} aria-pressed={tool === 'frequency'} onClick={() => setTool('frequency')}>E</button><button title="Move lane (V)" className={tool === 'move' ? 'active' : ''} aria-pressed={tool === 'move'} onClick={() => setTool('move')}><IconArrowsMove size={14} />V</button><button title="Mixdown" disabled={!audioLanes.length || working} onClick={openMixdown}>Mixdown</button></div><div className={`toolbar-group measurements ${showFrequencyMeasurements ? "tf-measurements" : ""}`}><span>Playhead {formatTime(playhead)}</span>{(['Start', 'End', 'Duration'] as const).map((label, i) => <label key={label}>{label} <TimeInput label={label} value={tfSelection ? (i === 2 ? tfSelection.t1 - tfSelection.t0 : i === 0 ? tfSelection.t0 : tfSelection.t1) : selection ? (i === 2 ? selection[1] - selection[0] : selection[i]) : 0} onChange={n => { if (tfSelection) { const fixed = i === 0 ? tfSelection.t1 : tfSelection.t0; const moving = i === 2 ? fixed + n : n; const t0 = Math.min(fixed, moving); const t1 = Math.max(fixed, moving); setTfSelection({ ...tfSelection, t0, t1 }); return i === 2 ? t1 - t0 : i === 0 ? t0 : t1; } const current = selection ?? [0, 0]; const fixed = i === 0 ? current[1] : current[0]; const moving = i === 2 ? fixed + n : n; const next: [number, number] = [Math.min(fixed, moving), Math.max(fixed, moving)]; setSelection(next); return i === 2 ? next[1] - next[0] : next[i]; }} /></label>)}{showFrequencyMeasurements && (['Low Hz', 'High Hz'] as const).map((label, i) => tfSelection ?
+      <label className="frequency-measurement" key={label}>{label} <TimeInput label={label} value={i === 0 ? tfSelection.f_lo : tfSelection.f_hi} onChange={n => { const source = lanes.find(lane => lane.id === tfSelection.laneId); const bounded = Math.max(0, Math.min(source ? source.sr / 2 : n, n)); const next = i === 0 ? (bounded < tfSelection.f_hi ? { ...tfSelection, f_lo: bounded } : tfSelection) : (bounded > tfSelection.f_lo ? { ...tfSelection, f_hi: bounded } : tfSelection); setTfSelection(next); return i === 0 ? next.f_lo : next.f_hi; }} /></label>
+      : <div className="frequency-measurement" key={label} aria-hidden="true" />)}</div>{takeState !== 'idle' && meter && <InputMeter meter={meter} />}</header><div ref={host} className="dock" />{Object.entries(targets).map(([id, element]) => createPortal(panels[id], element, id))}{currentTensor && <TensorInterpretation key={currentTensor.id} tensor={currentTensor.tensor} close={closeTensor} opened={file => { if (currentTensor.remember) remember(file); closeTensor(); }} />}{exporting && <ExportSelection finish={finishExport} />}
     {menu && menu.kind !== 'frequency' && createPortal(renderMenu(menu), document.body)}
     {editDialog && <Modal opened onClose={() => setEditDialog(null)} title={editFields[editDialog.op].title}>
       <form className="edit-form" onSubmit={event => {
@@ -818,6 +1008,9 @@ export default function App() {
         </select></label>
         <button title={saveDialog.as ? 'Save to destination' : 'Confirm overwrite'} disabled={working}>{saveDialog.as ? 'Save' : 'Overwrite'}</button>
       </form>
+    </Modal>}
+    {mixdownDialog && <Modal opened onClose={() => setMixdownDialog(null)} title="Mixdown">
+      <MixdownForm interval={mixdownDialog.interval} sr={mixdownDialog.sr} disabled={working} submit={writeMix} />
     </Modal>}
     {shortcutHelp && <Modal opened onClose={() => setShortcutHelp(false)} title="Keyboard shortcuts">
       <dl className="shortcut-list">{[

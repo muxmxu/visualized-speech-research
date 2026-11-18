@@ -44,6 +44,7 @@ from vsr.io.tensors import (
 )
 from vsr.presets import preset_definitions, resolve_preset
 from vsr.server.routes_edit import register_edit
+from vsr.server.routes_record import register_record
 from vsr.server.routes_spectrogram import register_spectrogram
 from vsr.server.session import Lane, Session
 from vsr.server.ws import Connections
@@ -162,7 +163,8 @@ def create_app(
         for identifier in pending_opens:
             arm_open(identifier, pending_opens[identifier])
         try:
-            yield
+            async with recording.lifespan():
+                yield
         finally:
             for launch in pending_opens.values():
                 if launch.timer is not None:
@@ -170,7 +172,8 @@ def create_app(
             pending_opens.clear()
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
-    cache_bytes = load_config()["cache_bytes"]
+    config = load_config()
+    cache_bytes = config["cache_bytes"]
     session = Session(history_budget=cache_bytes)
     app.state.session = session
     if launch_id is not None:
@@ -620,6 +623,9 @@ def create_app(
         )
 
     register_edit(app, session, find_audio, _heavy_compute, connections)
+    recording = register_record(
+        app, session, find_audio, connections, Path(config["recordings_dir"]).expanduser().resolve()
+    )
     register_spectrogram(app, session, find, _heavy_compute, cache_bytes)
 
     @app.get("/api/settings")
@@ -642,12 +648,16 @@ def create_app(
             await socket.close(code=1008)
             return
         await socket.accept()
-        connections.clients.append(socket)
         try:
+            async with recording.lock:
+                state = recording.state()
+                if state["state"] != "idle":
+                    await socket.send_json(state)
+                connections.clients.add(socket)
             while True:
                 await socket.receive_text()
         except WebSocketDisconnect:
-            connections.clients.remove(socket)
+            connections.clients.discard(socket)
 
     web = Path(__file__).resolve().parents[1] / "web"
 

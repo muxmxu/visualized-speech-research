@@ -1,5 +1,5 @@
 import { notifications } from '@mantine/notifications';
-import type { LaneEdit, SaveSubtype } from './types';
+import type { AudioDevices, Lane, LaneEdit, MixdownRequest, RecordArm, RecordCalibrate, RecordStart, RecordState, SaveSubtype } from './types';
 
 const params = new URLSearchParams(location.search);
 const bootstrap = params.get('token');
@@ -40,4 +40,23 @@ export function stepHistory(id: string, direction: 'undo' | 'redo') {
 }
 export function saveLane(id: string, subtype: SaveSubtype, path?: string) {
   return request(`/lanes/${id}/save`, body({ path, subtype }));
+}
+
+export function audioDevices() {
+  return json<AudioDevices>('/audio/devices');
+}
+export function armRecording(settings: RecordArm) {
+  return json<RecordState>('/record/arm', body(settings));
+}
+export function startRecording(settings: RecordStart) {
+  return json<RecordState>('/record/start', body(settings));
+}
+export function stopRecording() {
+  return json<{ lanes: Lane[] }>('/record/stop', { method: 'POST' });
+}
+export function calibrateRecording(settings: RecordCalibrate) {
+  return json<{ latency_ms: number }>('/record/calibrate', body(settings));
+}
+export function mixdown(settings: MixdownRequest) {
+  return json<{ path: string; clipping: boolean }>('/mixdown', body(settings));
 }

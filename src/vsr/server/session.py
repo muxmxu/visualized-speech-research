@@ -24,6 +24,7 @@ class Lane:
     gain_db: float = 0.0
     mute: bool = False
     solo: bool = False
+    record_warnings: list[dict] = field(default_factory=list)
 
     frame_rate: float | None = None
     frame_t0: float = 0.0
@@ -45,6 +46,7 @@ class Lane:
         }
         rows, frames = self.data.shape
         if self.kind == "feature":
+            del meta["record_warnings"]
             return meta | {
                 "rows": rows,
                 "frames": frames,
@@ -57,9 +59,32 @@ class Lane:
 
 
 @dataclass
+class RecordingMetadata:
+    source: str
+    sr: int
+    offset: float
+    record_warnings: list[dict]
+    saved_content_version: int
+
+    @classmethod
+    def from_lane(cls, lane: Lane):
+        return cls(
+            lane.source, lane.sr, lane.offset, lane.record_warnings, lane._saved_content_version
+        )
+
+    def apply(self, lane: Lane) -> None:
+        lane.source = self.source
+        lane.sr = self.sr
+        lane.offset = self.offset
+        lane.record_warnings = self.record_warnings
+        lane._saved_content_version = self.saved_content_version
+
+
+@dataclass
 class EditGroup:
     snapshots: dict[str, tuple[torch.Tensor, int]]
     created: list[Lane]
+    recordings: dict[str, RecordingMetadata] = field(default_factory=dict)
 
     @property
     def nbytes(self) -> int:
@@ -105,11 +130,38 @@ class Session:
             self.redo_history.clear()
 
     def record_edit(self, updates: list[tuple[Lane, torch.Tensor]], created: list[Lane]) -> None:
+        self._record_group(updates, created, {})
+
+    def record_take(self, replacements: list[tuple[Lane, Lane]], created: list[Lane]) -> None:
+        self._record_group(
+            [(lane, take.data) for lane, take in replacements],
+            created,
+            {
+                lane.id: RecordingMetadata(
+                    take.source, take.sr, take.offset, take.record_warnings, lane.version + 1
+                )
+                for lane, take in replacements
+            },
+        )
+
+    def _record_group(
+        self,
+        updates: list[tuple[Lane, torch.Tensor]],
+        created: list[Lane],
+        recordings: dict[str, RecordingMetadata],
+    ) -> None:
         # shortcut: whole-lane copies use more memory; use deltas when long files require it.
         snapshots = {lane.id: (lane.data.clone(), lane._content_version) for lane, _ in updates}
-        self.undo_history.append(EditGroup(snapshots, created))
+        old_recordings = {
+            lane.id: RecordingMetadata.from_lane(lane)
+            for lane, _ in updates
+            if lane.id in recordings
+        }
+        self.undo_history.append(EditGroup(snapshots, created, old_recordings))
         self.redo_history.clear()
         for lane, data in updates:
+            if lane.id in recordings:
+                recordings[lane.id].apply(lane)
             self._set_content(lane, data, lane.version + 1)
         self.lanes.extend(created)
         self._limit_history()
@@ -127,6 +179,10 @@ class Session:
         for lane_id, (data, content_version) in group.snapshots.items():
             lane = self.lane(lane_id)
             group.snapshots[lane_id] = (lane.data, lane._content_version)
+            if lane_id in group.recordings:
+                previous = group.recordings[lane_id]
+                group.recordings[lane_id] = RecordingMetadata.from_lane(lane)
+                previous.apply(lane)
             self._set_content(lane, data, content_version)
             changed.append(lane)
         if redo:
@@ -146,6 +202,7 @@ class Session:
             retained = []
             for group in history:
                 group.snapshots.pop(lane_id, None)
+                group.recordings.pop(lane_id, None)
                 group.created[:] = [lane for lane in group.created if lane.id != lane_id]
                 if group.snapshots or group.created:
                     retained.append(group)

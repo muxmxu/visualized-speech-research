@@ -5,6 +5,7 @@ interface LaneMetadata {
 
 export interface Lane extends LaneMetadata {
   kind: 'audio'; channels: number; samples: number; dirty: boolean;
+  record_warnings: RecordingWarning[];
 }
 
 export type MelSettings = { n_mels: number; fmin: number; fmax: number; htk: boolean };
@@ -42,3 +43,29 @@ export interface LaneEdit {
   };
 }
 export type SaveSubtype = 'PCM_16' | 'PCM_24' | 'FLOAT';
+
+export type RecordingWarning = { time_s: number; type: 'input_overflow' | 'output_underflow' };
+export interface AudioDevice {
+  id: number; name: string; max_input_channels: number; max_output_channels: number; default_samplerate: number;
+}
+export interface AudioDevices {
+  hostname: string; devices: AudioDevice[]; default_input: number | null; default_output: number | null; reason: string | null;
+}
+export interface RecordMapping { lane: string | null; channels: number[] }
+export interface RecordDeviceSettings { input_device: number | null; sr: number; blocksize: number }
+export interface RecordArm extends RecordDeviceSettings { mapping: RecordMapping[] }
+export interface RecordStart extends RecordArm {
+  output_device?: number; subtype: SaveSubtype; overdub: boolean; latency_ms: number | null; start_time: number;
+}
+export interface RecordState {
+  type: 'record_state'; state: 'idle' | 'armed' | 'recording'; mapping: RecordMapping[]; start_time: number | null;
+  notice: 'microphone_permission' | 'device_clock_drift' | null;
+}
+export interface RecordMeter {
+  type: 'record_meter'; channels: { peak_dbfs: number | null; rms_dbfs: number | null; clip: boolean }[];
+}
+export interface RecordPreview {
+  type: 'record_preview'; target: number; sr: number; first_sample: number; samples_per_column: number; sample_count: number;
+}
+export type RecordCalibrate = RecordDeviceSettings & { output_device: number | null };
+export interface MixdownRequest { t0: number; t1: number; sr: number; path: string; subtype: SaveSubtype }
