@@ -6,6 +6,8 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+H59 directs first usable delivery through normal workflows with no optional defensive expansions or repeated checks, and this instruction applies to all remaining work.
+M2-T5 passed both independent reviews on the frozen 14-case browser run and the D38 executor committed exactly the approved tree as `f997b75fdad271bfccddf1d433b29973ca348b99`.
 The reviewed M2 CLI launch contract D49 was integrated as spec-only commit `f37ad73676e7248654e9c9c60b4f3a82ac117e39`, with only DESIGN §§7 and 21 changed and all 92 other non-record blobs identical to fully tested M1.
 M2-T4's local show path now uses a direct loopback connection, passed exact authenticated PCM and zero proxy delivery regression with 84 selected tests and both independent reviews, and was committed locally as `9ed07af2cb0851d9777af735dd974718b132e832`.
 M2-T4 passed 83 selected tests and independent audit, but semantic review reproduced default local routing through an environment proxy, so the Worker is correcting the loopback request path.
