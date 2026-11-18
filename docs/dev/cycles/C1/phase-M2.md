@@ -83,6 +83,21 @@ Exercise all five audio layouts, all four feature axes and all six scales, compl
 A `.pt` containing an inert arbitrary Python object is rejected with the documented error body, and the server continues to serve authenticated requests.
 Include an object-array rejection and check that inputs opened for inspection remain untouched.
 
+### T2 task amendment after semantic reviews 1 and 2
+
+The two consecutive FAILs are recorded in [review 1](reports/M2-T2-review-1.md) and [review 2](reports/M2-T2-review-2.md).
+This sole task amendment addresses the remaining DESIGN §10 normalization defect within the seven-path T2 write set above.
+Review 2 reproduced three zero PCM samples from NumPy `uint32` and `uint64` `.npy` inputs containing the unsigned midpoint and its two neighbors because float32 conversion preceded centering.
+First add red regressions in `tests/test_tensor_lanes.py` against the review-2 tree using generated `.npy` files, authenticated file interpretation and authenticated same-rate PCM readback.
+For a `uint32` input of `[2**31 - 1, 2**31, 2**31 + 1]`, require the decoded float32 PCM to equal `[-2**-31, 0, 2**-31]` exactly.
+For a `uint64` input of `[2**63 - 1, 2**63, 2**63 + 1]`, require the decoded float32 PCM to equal `[-2**-63, 0, 2**-63]` exactly.
+All six expected samples are exactly representable in float32.
+Limit the correction to exact centering arithmetic on the CPU source before conversion to float32 in `src/vsr/io/tensors.py` and the regressions in `tests/test_tensor_lanes.py`.
+Keep stored samples and compute-device outputs float32, retain the existing public dtypes and flags, and preserve the existing uint8 file and framed PCM, signed PCM and float PCM assertions.
+All other T2 requirements and verification still apply.
+Record the same regressions passing after the fix and rerun the full affected T2 suite declared above on the final frozen patch for independent mechanical audit and final semantic review of the remaining finding.
+Any further semantic FAIL makes T2 BLOCKED under the CODEX review cap.
+
 ## T3 — Static plotting and skill install
 
 Deliver the M2 §16 plotting functions and the bundled skill installer, using `plot` only when imported.
