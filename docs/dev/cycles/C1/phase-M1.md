@@ -23,7 +23,8 @@ Dispatch follows the CODEX amendment rule and the listed dependencies.
 The Controller records the proposal, scope and base for the authorized protected-section exception before dispatching A1.
 T4 also implements the H54 workspace repairs from [the UI consultation](reports/ui-design-consult-H54.md), using existing DESIGN §9 controls, palette and dependencies.
 During T4 implementation the Worker reproduced a preexisting duplicate-source lane deletion crash on the accepted T3 backend.
-The phase dispatch order below inserts T4a after T4 and governs advancement to T5 in the [T4 task plan](reports/M1-T4-task-plan.md).
+The phase dispatch order below inserts T4a after T4 and governs its acceptance in the [T4 task plan](reports/M1-T4-task-plan.md).
+H56 reports that the accepted T4 screenshots remain visually poor, so T4b refines the existing DESIGN §9 presentation before the Frequency Analysis panel is added.
 
 ## Execution and checks
 
@@ -36,10 +37,11 @@ The phase dispatch order below inserts T4a after T4 and governs advancement to T
 | M1-T3 | M1-T2 and the A2 D43 contract | `terra(high)`, multi-module mask and PCM | high | `sol(xhigh)` | Task Planner `sol(medium)` for absolute grids and resampling margins under D43 |
 | M1-T4 | M1-T3 | `terra(high)`, multi-module rendering, view state and H54 workspace design | high | `sol(high)` | Task Planner `sol(medium)` for viewport/scissor, request timing, responsive layout and browser pixel evidence |
 | M1-T4a | M1-T4 | `terra(high)`, single-module bug fix | normal | `terra(high)` | No, the reproducible case and executable checks are below |
-| M1-T5 | M1-T4a | `terra(high)`, multi-module analysis panel | normal | `sol(high)` | No, use §8.4 and the completed recon |
+| M1-T4b | M1-T4a | `terra(high)`, multi-module frontend presentation | normal | `sol(high)` | The bounded H56 presentation contract below |
+| M1-T5 | M1-T4b | `terra(high)`, multi-module analysis panel | normal | `sol(high)` | No, use §8.4 and the completed recon |
 | M1-T6 | M1-T5 | `terra(high)`, multi-module selection and transport | high | `sol(high)` | No, use §9.2, §9.4, §9.6 and T3 contract |
 | M1-T7 | M1-T6 | `terra(high)`, multi-module browser composition and PDF | high | `astra(medium)` for the particularly complex cross-layer and file-format verification | Task Planner `sol(medium)` with the accepted arch delta and recon |
-| M1-T8 | M1-T1 through T7, including T4a | `terra(high)`, final integration and benchmark | high | `sol(high)` | No, use LIFECYCLE Integration and the benchmark definitions below |
+| M1-T8 | M1-T1 through T7, including T4a and T4b | `terra(high)`, final integration and benchmark | high | `sol(high)` | No, use LIFECYCLE Integration and the benchmark definitions below |
 
 An independent `luna(xhigh)` Mechanical Auditor precedes the named semantic Reviewer for every task.
 Record the actual model and effort, and dispatch an independent `terra(medium)` Auditor under the CODEX fallback if the runtime lacks Luna.
@@ -56,7 +58,7 @@ Implicit writes include `.venv/`, `.ruff_cache/`, `.pytest_cache/`, `__pycache__
 Run Python commands from the worktree root and frontend commands from `frontend/`.
 Use the existing Chromium path from the host contract through `VSR_E2E_CHROMIUM` or the Playwright install procedure in DESIGN §20.
 
-Use `task/arch-A1`, `phase/arch`, `task/M1-T1` through `task/M1-T7`, `task/M1-T4a` and `phase/M1`, preserving branch creation bases in the ledger.
+Use `task/arch-A1`, `phase/arch`, `task/M1-T1` through `task/M1-T7`, `task/M1-T4a`, `task/M1-T4b` and `phase/M1`, preserving branch creation bases in the ledger.
 The first task branches from the integrated phase baseline, and each successor branches from its reviewed dependency as prescribed in LIFECYCLE Integration.
 D38 reserves Git commits and integration to the authorized independent top-level executor, with the integration Worker as final-tree writer and the Controller coordinating records and authorized pushes.
 The Auditor verifies the allowed paths, checks evidence on the current diff, runs `python3 scripts/check_diff_rules.py --base <recorded-cut-commit>` and performs the LIFECYCLE protection and public-repository checks.
@@ -185,12 +187,34 @@ Run all AGENTS.md and LIFECYCLE checks on the final tree, including dependency s
 After the production build, rebuild served assets with `npm run build -- --mode test` and run `npx playwright test --workers=1` on the bound Chromium for the full e2e suite.
 Run `git diff --check` and `python3 scripts/check_diff_rules.py --base <T4-cut-SHA>`, and record changed-file hashes, the red and green regression results and the full check results.
 Require the separate Mechanical Auditor and semantic Reviewer specified above to verify the final tree, including the route behavior, regression evidence, write set and LIFECYCLE checks, with all REVIEW lines disposed.
-After both PASS verdicts, use the independent D38 executor to commit the reviewed two-file diff on the local task branch before dispatching T5 from that commit.
+After both PASS verdicts, use the independent D38 executor to commit the reviewed two-file diff on the local task branch before dispatching T4b from that commit.
+
+## M1-T4b — Workspace visual refinement
+
+H56 identifies the accepted T4 desktop and narrow screenshots as visually poor despite the H54 functional and geometry repairs.
+DESIGN §§9.1–9.6 fixes panel positions, palette, typography, control sizes and interaction conventions while leaving grouping, spacing and contrast to implementation.
+Branch from the independently accepted T4a commit and keep the task within the existing frontend and DESIGN §9 scope without adding runtime dependencies, routes, config keys or assets.
+Refine the fixed top bar into legible transport, tool and time-measurement groups with consistent 24 px controls, clear pressed and focus states and wrapping only between groups at 800 × 600.
+Style dock tabs and panel surfaces with the specified §9.5 colors, readable active-tab contrast and consistent separators while preserving saved and manually resized layouts.
+Present each lane header with a distinct name and metadata row, grouped actions, a clear W/S/W+S segment, aligned Gain and Offset fields and the existing selected-view blue indicator.
+Group Display controls by spectrum, frequency range and color, restore its labels and controls to the 12 px baseline, align label/value columns and keep every action reachable through the panel's own scrolling region at 800 × 600.
+Improve Files navigation and Recent rows while retaining full paths on focus or hover and the existing file-opening behavior.
+Give unused lane space a quiet workspace surface treatment without changing plot colors, renderer pixels, viewport geometry, the initial 160 px lane height or the 30/70 waveform/spectrogram split.
+Use responsive CSS to limit ancillary chrome at 800 × 600 while retaining the §9.1 dock positions and positive visible plot width; do not automatically re-dock panels or override persisted user widths.
+Write only `frontend/src/App.tsx`, `frontend/src/styles.css`, `frontend/src/panels/Display.tsx` and `frontend/tests/e2e/m1-spectrogram.spec.ts`, adding `frontend/tests/e2e/m1-ui.spec.ts` only if the existing suite cannot express the focused checks cleanly.
+Recapture task-local ignored desktop and narrow screenshots as `frontend/test-results/screens/M1-ui-desktop.png` at 1280 × 720 and `frontend/test-results/screens/M1-ui-narrow.png` at 800 × 600 using the existing generated two-view fixture.
+In real Chromium assert non-overlapping top-bar groups, visible and actionable transport and time fields, distinct active view and mode, computed Display label size of at least 12 px, scroll access to the final Display action, positive plot width and no horizontal document overflow at both sizes.
+At 800 × 600 assert keyboard access to Files path, active lane name, Gain, Offset, Display action and time inputs.
+Inspect both screenshots for the observed toolbar, tab, inspector, lane-header and empty-workspace defects, recording specific before/after evidence rather than an aesthetic score.
+Preserve M0 workspace and playback and M1 spectrogram, viewport, request, hover and restored-layout behavior.
+Run `npm ci`, `npm run typecheck`, `npm test`, `npm run lint`, `npm run build`, the full one-worker Chromium suite, `git diff --check` and `python3 scripts/check_diff_rules.py --base <T4a-cut-SHA>` on the frozen task tree.
+Use independent mechanical audit and semantic review before the D38 task commit, then dispatch T5 from the accepted T4b commit.
 
 ## M1-T5 — Frequency Analysis panel
 
 Deliver the docked frequency analysis UI using the committed framed spectrum endpoint and uPlot, with frame, Welch and full methods, supported statistics/units, linear/log frequency axis and multi-lane overlays.
 Bind to T4 active views and hover and preserve each lane's source/clock and analysis configuration.
+Use the accepted T4b panel spacing, 12 px typography and active-control styling for the new panel.
 Add Frequency Analysis below Lanes on first use and when a restored workspace lacks that panel, keeping its existing group positions and tabs.
 Seed the T5 browser regression with the original M0 panel IDs in `vsr-layout`, open Frequency Analysis from the restored layout, verify it plots data, and check it persists once beside the retained M0 panels and Display after reload.
 Throttle hover frame requests to animation frames and abort superseded frame requests.
@@ -204,7 +228,7 @@ T6 attaches T-F time/visible-band constraints to the resulting analysis input.
 
 Deliver the E tool's lane- and view-bound rectangle, move/resize, editable bounds, audition transport, playback toolbar and M1 context actions.
 Bind audition to the T3 PCM contract and the selected view's n_fft, win_length, window and window_param, with only the selected lane sampled while auditioning and existing M0 chunk scheduling preserved.
-Use T4's control styling for the E tool and floating playback action.
+Use T4b's control styling for the E tool and floating playback action.
 Bind Frequency Analysis to the T-F rectangle's time interval and display frequency bounds while leaving the underlying FFT calculation unchanged.
 Preserve T/V tools, normal selection, keyboard transport, lane-offset alignment and playback tests.
 Write `frontend/src/{App.tsx,styles.css}`, `frontend/src/state/tfSelection.ts`, `frontend/src/lanes/{SpectralLane,TfSelection}.tsx`, `frontend/src/audio/{playback,testHook}.ts`, `frontend/src/panels/FrequencyAnalysis.tsx`, `frontend/tests/{tfSelection,playback}.test.ts` and `frontend/tests/e2e/m1-audition.spec.ts`.
@@ -232,8 +256,8 @@ Provide M1.13 and a screenshot of the crop interaction as human evidence.
 
 ## M1-T8 — Integration, regression, measurement and acceptance
 
-Deliver the accepted final M1 tree and `docs/acceptance/M1.md` after T1–T7 independent evidence, including T4a, is current and their writers have stopped.
-Write the cumulative T1–T7 implementation sets, including T4a, only for necessary integration fixes, `tests/bench/m1_spectrogram.py`, `tests/bench/m1_spectrogram.ts`, `docs/acceptance/M1.md` and append-only `docs/DESIGN.md` §21 as required by recorded decisions.
+Deliver the accepted final M1 tree and `docs/acceptance/M1.md` after T1–T7 independent evidence, including T4a and T4b, is current and their writers have stopped.
+Write the cumulative T1–T7 implementation sets, including T4a and T4b, only for necessary integration fixes, `tests/bench/m1_spectrogram.py`, `tests/bench/m1_spectrogram.ts`, `docs/acceptance/M1.md` and append-only `docs/DESIGN.md` §21 as required by recorded decisions.
 The post-squash write set on master is the measurement row in `docs/dev/performance.md`, which stays in the separate records commit.
 Use LIFECYCLE Integration and D38 to merge reviewed attempts and freeze the phase revision.
 Obtain independent Mechanical Auditor PASS on the full AGENTS commands and benchmark evidence and independent Task Reviewer PASS on that revision before the authorized executor squashes it.
@@ -242,7 +266,7 @@ Run `uv run python tests/bench/m1_spectrogram.py` with its browser driver on eac
 Keep evidence of all M0 and M1 regressions and rule, drift, protected-section and public-repository checks.
 For M1.C3 compare with the integrated A1/A2 spec baseline, and independently verify the cycle's only approved protected delta from the M0 baseline as part of cumulative review.
 Use a Chinese acceptance report with one result/evidence row per exit, unavailable-device reasons, screenshots at `frontend/test-results/screens/M1-*.png`, benchmarks and actual DESIGN deviations.
-Include the T4 desktop/narrow H54 screenshots and review evidence, and capture the final desktop with Frequency Analysis and T-F selection integrated.
+Include the T4b desktop/narrow H56 screenshots and review evidence, and capture the final desktop with Frequency Analysis and T-F selection integrated.
 The screenshot review serves §20 and the project gate for Human UI feedback.
 The Controller reports the phase evidence and screenshot locations through the authorized channel after integration.
 
@@ -312,12 +336,13 @@ Record material performance differences and observed bottlenecks without changin
 
 ## Budget
 
-The combined estimate is 60 agent invocations, comprising 49 baseline and 11 reserve.
+The combined estimate is 65 agent invocations, comprising 49 baseline and 16 reserve.
 The arch estimate is 10, with nine baseline invocations for a Plan Reviewer, the A1 and A2 Worker/Auditor/Reviewer triplets, an A1 D38 Git executor and an A2 post-verdict D38 continuation, plus one reserve.
-The M1 estimate is 50, with 40 baseline invocations for one completed Recon, two Overall Planners including the interrupted attempt, one Plan Reviewer, four Task Planners, eight Worker/Auditor/Reviewer triplets, seven task-level D38 Git executors and a T8 post-verdict D38 continuation, plus ten reserve.
+The M1 estimate is 55, with 40 baseline invocations for one completed Recon, two Overall Planners including the interrupted attempt, one Plan Reviewer, four Task Planners, eight Worker/Auditor/Reviewer triplets, seven task-level D38 Git executors and a T8 post-verdict D38 continuation, plus fifteen reserve.
 The baseline includes 15 `sol` and three `astra` invocations.
 The combined Planner amendment and H54 consultation consume two M1 reserve invocations.
 The T4a insertion allocates five M1 reserve invocations for this Planner, the Worker/Auditor/Reviewer triplet and a D38 Git executor, with three reserve invocations left in the estimate for targeted fact checks, bounded rework and required verification.
+The T4b insertion adds five M1 reserve invocations for its Planner, Worker/Auditor/Reviewer triplet and D38 Git executor, retaining three reserve invocations in the revised estimate.
 Track actual usage by role and phase, including Git executors and interrupted attempts.
-The 1.5× estimate-overrun checkpoints are 15 invocations for arch and 75 for M1 under the CODEX contract, with the Controller applying any recorded authorization covering the current phase before further dispatch.
+The 1.5× estimate-overrun checkpoints are 15 invocations for arch and 83 for M1 under the CODEX contract, with the Controller applying any recorded authorization covering the current phase before further dispatch.
 D42 records M0 continuation after its estimate, and the plan adds no paid compute or external cost.
