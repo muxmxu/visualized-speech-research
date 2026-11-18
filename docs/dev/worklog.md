@@ -6,6 +6,7 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+Arch-M7 exact source-only patch is delivered at `9a0b715aa5d532249e88d69161a5b3f03f0c67e3`; unchanged M6 runtime evidence is retained and the three disjoint reviewed M7 implementation branches proceed together.
 M6 is delivered at `f478d71d9d1cb6745557f8bc874c8191686fbe05` with exact phase tree equality, 268 pytest and 37 Vitest passes and both disjoint browser groups passing all 78 distinct cases.
 The exact arch-M7 patch and M7 plan passed independent review with their clarifications and the delivered M6 DESIGN byte baseline matches the architecture freeze.
 M6 independently accepted T1 and T2 at `f6266aa782b120b98b31ecad0a6b751c79095c8f` and `bda8c5a5d447a65e3c5d2a8b06cb93216ca69574`, and the combined candidate is ready for the real dataset workflow and disjoint regression.

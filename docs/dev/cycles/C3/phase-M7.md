@@ -1,5 +1,7 @@
 # C3 M7 — RIR analysis, arrival inspection and ESS measurement
 
+The accepted arch-M7 specification is `9a0b715aa5d532249e88d69161a5b3f03f0c67e3`.
+
 Dispatch from accepted M6 plus the exact delivered arch-M7 §14.1 amendment. Bind the actual product commit and decision IDs before cutting three disjoint worktrees. Read DESIGN §§4, 6–7, 9, 14, 16–20, the approved arch-M7 acceptance and the RIR reference notes for Lundeby arithmetic. Use D38 and the existing checks lock, warmed uv/npm caches, isolated worktree environments and fixture VSR_HOME, current system Chromium and a real short TMPDIR. Estimate 18 invocations including an independent Plan Review. Authenticated routes, recording location and runtime dependencies follow DESIGN.
 
 ## Bound contracts
