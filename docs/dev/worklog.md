@@ -6,6 +6,7 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+M1-T5's first frozen Frequency Analysis tree passed 31 Vitest and six Chromium cases and independent mechanical audit, but semantic review 1 reproduced display-only extra spectrum requests, stale curve relabeling and a valid Welch interval suppressed by frontend rounding, so correction is active.
 M1-T4b correction closed all three semantic review 1 findings, passed independent audit 2 with 42 Chromium and 29 Vitest cases and semantic review 2, and was committed locally by the D38 executor as `b2babb0c9fc8bc8a639a51910581dafb30075131`.
 M1-T4b's first frontend tree passed 40 Chromium and 29 Vitest cases and independent mechanical audit, but semantic review 1 reproduced narrow dock-label collapse, a 480 px toolbar overflow and an active-lane keyboard-test gap, so the Worker is correcting them before a task commit.
 M1-T4a passed independent mechanical audit and semantic review on the frozen two-file tree, and the D38 executor committed it locally as `411e0cf9a65614d9a3374bb5a4a8b08ea025b170` without pushing the task branch.
