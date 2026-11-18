@@ -29,6 +29,8 @@ The Controller returned all seven review-1 findings to the T4 Worker for regress
 M1-T4 correction 1 passed 29 Vitest and 40 real Chromium tests, including eight new review regressions, and independent mechanical audit 2 passed on the frozen twelve-file tree.
 Independent semantic review 2 repeated all seven prior browser findings and passed, with the one HTTP notification REVIEW allowed as V1#1.
 The two updated desktop and narrow screenshots were inspected directly, while the previous untracked browser test bytes were unavailable for bytewise comparison.
+The independent D38 executor committed the accepted T4 twelve-file tree as `fc3d13df6d561b6508c67c12536beca3bcf2c1e7` without pushing the task branch.
+The focused T4a backend Worker was dispatched from that commit for regression-first duplicate-source lane deletion repair before T5.
 M1-T2's amended tree passed final independent audit 3 and semantic review 3 with 65 tests, two allowed device-skip REVIEW lines and a cold peak RSS below 1.5 GiB.
 The reviewed M1-T2 task branch commit is `70d7f5c45e18b78777883bd1e6a2207704f6265f`, and M1-T3 planning follows it.
 An independent warm-cache diagnostic observed 0.102 and 1.966 seconds for 256-row and 1024-row log viewport requests, respectively; T8 retains the formal browser performance measurement.
