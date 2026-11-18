@@ -195,6 +195,9 @@ Session 与文件：
 - `GET /session` → lanes 元数据列表（不含数组）
 - `GET /fs/list?path=` → 目录项（name、is_dir、size、mtime），只列目录与支持的扩展名
 - `POST /open {paths}` → 音频文件直接成为 lane；tensor 文件返回 `{needs_interpretation: true, path, tree}`（§10）
+
+`vsr [paths...]` 含 tensor 文件时，CLI 把以调用方工作目录解析得到的绝对路径交给同一 server，由本次打开的浏览器页接续解释流程。冷启动在 server 开始处理请求前登记路径，并在应用 lifespan 启动时安装过期回调。热启动用现有的鉴权 `POST /open {paths}` 加私有请求头 `X-VSR-Open-Launch: stage` 登记，返回 `{"launch_id": "<id>"}`。CLI 根据 runtime 发出的探测、设置和打开请求均直连本机回环地址，不经环境代理。每次调用使用由 `secrets.token_urlsafe(32)` 生成的独立一次性标识，格式为 43 个 URL-safe 字符。CLI 沿用 §4 的 token 启动地址，只在 URL fragment 附加 `#open=<id>`。前端初始化时用 `history.replaceState` 移除该 fragment，然后用带 Bearer token 的 `POST /open {"paths":[]}` 加 `X-VSR-Open-Launch: <id>` 领取。领取会在读取文件前原子移除登记项，成功后返回单 tensor 的既有解释响应，或对多路径返回 `{"lanes":[...],"interpretations":[...]}`。两数组各自保留参数顺序，`interpretations` 中每项沿用单 tensor 的 `{needs_interpretation: true, path, tree}` 结构。所有文件读取与检查成功后才发布音频 lanes，前端依次使用 §10 的解释对话框，当前项确认成功或取消后进入下一项。未领取的路径只存于 server 内存，最多保留 5 分钟且同时最多 64 项。登记的列表须由绝对路径组成，且至少含一项 §10 支持的 tensor 扩展名（忽略大小写）。非法登记、非空路径领取或非法头返回 422，未知、已领取（含领取后文件处理失败）或过期的标识返回 404，登记满额返回 429，均使用本节错误 body。私有流程的成功响应使用 `Cache-Control: no-store`。浏览器只在当前页面内存中持有领取所得的路径和 tensor tree。此请求头仅用于 CLI 与本应用页面的接续流程。不带该头的 `POST /open` 以及 `POST /upload` 沿用原有请求与响应。
+
 - `POST /open_tensor {path, key_path, interpretation}` → 新 lanes
 - `POST /upload?name=`，body 为文件字节（浏览器拖放用）：文件存到 `$VSR_HOME/uploads/<uuid>/<name>`，之后与 `POST /open` 相同（音频直接成为 lane，tensor 文件返回 interpretation 请求）
 - `POST /push`，body 为 framed（header 含 name、kind、sr、interpretation）→ 新 lanes，并广播 `lanes_changed`
@@ -734,3 +737,4 @@ D40（2026-11-18）：按 H45 将可见工作区矩形裁剪的单页栅格 PDF 
 D43（2026-11-18）：masked PCM 将完整 T-F 矩形与分块边界分开传递；同一首块的 20 s 处可为选框边缘或长选框内部，按 §19 连续性验收及整条 lane mask 后重采样的参考消除歧义。
 D44（2026-11-18）：full 方法的选区超过 2^24 个样本时，公共 DSP API 抛出值错误，HTTP 入口返回可见的客户端错误。§8.4 要求 FFT 覆盖整个选区并限制长度，拒绝可避免静默丢弃尾部样本。
 D45（2026-11-18）：T-F mask 在选区边缘以内保持单位增益，时间和频率轴各在选区外两个帧或 bin 步长内以半余弦降为零，角部权重相乘，分块始终使用原选区边界。HTTP PCM 入口拒绝实际 float32 窗不满足 NOLA 的 Gaussian 参数，以免返回无效试听。
+D49（2026-11-18）：CLI 通过现有鉴权 `POST /open` 的私有接续流程，以一次性标识将本次 tensor 启动与浏览器解释对话框绑定。冷启动和热启动复用限时内存登记，避免文件路径进入启动 URL 或浏览器存储，并保留原有文件打开接口。
