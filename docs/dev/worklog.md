@@ -6,6 +6,7 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+M2-T1 passed the independent numerical and semantic reviews, verified CPU relative mel power error below 1.351e-6 and bitwise STFT preservation on the tested fixtures, and was committed locally as `84486e6ffd0209eee1d5b1e2357334f431f04a74`.
 M2 phase planning and its sole Plan Review amendment are complete, including integer PCM verification for file loading and Python push, and shared mel DSP implementation started from delivered M1.
 The independently reviewed M1 phase was squashed to master as `a4b37b680e3e14f0d07d244f94f79b349a471814`, with exact patch equivalence, every full master check exit zero, 119 Python passes, 36 device skips, 37 Vitest passes and 66 Chromium passes.
 The M1 phase integration passed 119 Python, 37 Vitest and 66 final Chromium tests, recorded CPU benchmarks, and passed independent audit and semantic review before the required master regression.
