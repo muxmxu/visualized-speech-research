@@ -21,6 +21,7 @@ Final review 3 independently reproduced 12 old-route overflow responses and veri
 The review reconstructed the prior test file hash after removing only the appended regression and its import, confirming that prior assertions were preserved.
 The independent D38 Git executor committed the accepted M1-T3 four-file task tree as `9cb96340880a521f5bba7c0354704db3e8735b34` without pushing the task branch.
 M1-T4 implementation was dispatched from that reviewed commit with H54's visual repairs and meaningful desktop and narrow browser captures in scope.
+The T4 Planner corrected one arithmetic auto80 example from [−100,−20] to [−90,−10] for lane maximum −12.25 dB, preserving the DESIGN formula and other plan content.
 M1-T2's amended tree passed final independent audit 3 and semantic review 3 with 65 tests, two allowed device-skip REVIEW lines and a cold peak RSS below 1.5 GiB.
 The reviewed M1-T2 task branch commit is `70d7f5c45e18b78777883bd1e6a2207704f6265f`, and M1-T3 planning follows it.
 An independent warm-cache diagnostic observed 0.102 and 1.966 seconds for 256-row and 1024-row log viewport requests, respectively; T8 retains the formal browser performance measurement.

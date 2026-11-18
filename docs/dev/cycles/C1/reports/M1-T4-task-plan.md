@@ -61,7 +61,7 @@ Use the existing authenticated client for `GET /api/presets?sr=<source sample ra
 Read resolved presets from the server, start from analysis with heat, preserve the selected colormap when applying a preset, and resolve rate-dependent preset values at each destination rate for Apply to all lanes.
 Make the common FFT dropdown changes atomic with any dependent valid parameters and keep view-only actions scoped to the active view.
 Provide parameters, linear/log frequency controls, frequency zoom about the pointer with Alt+wheel, frequency-axis drag to pan, colorbar visibility, range drag, palette and LINEAR/NEAREST filtering, and format Copy spec from the active view using the exact §16 key order and omission rules.
-For auto80 compute ceiling `10 * ceil(lane_db_max / 10)` and floor `ceiling - 80`; as a concrete oracle a lane max of −12.25 dB gives [−100,−20] even when the visible maximum changes.
+For auto80 compute ceiling `10 * ceil(lane_db_max / 10)` and floor `ceiling - 80`; as a concrete oracle a lane max of −12.25 dB gives [−90,−10] even when the visible maximum changes.
 Decode one framed C-order f16 matrix and use `rows,cols,row_freqs,col_t0,col_dt,f_axis,view_db_max,lane_db_max` from the response, including null viewport maximum and empty coverage.
 Use the supplied column centers and row frequencies for placement and hover, honoring irregular terminal row spacing and the effective linear or logarithmic axis boundaries.
 Place low frequencies at the bottom and share the frequency transform between axis labels, texture placement, hover and the future selection surface.
