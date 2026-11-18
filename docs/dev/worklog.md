@@ -6,6 +6,8 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+M5 is delivered at `1f1d5a585763ccf8b381c0ebeba874d562601c26` with 267 distinct pytest, 37 Vitest, and 77 Chromium cases passing across reviewed exact inputs, including the full real analyzer workflow and isolated correction to device switching.
+The compact 0.2.0 candidate plan and M6 Plan Review passed; local candidate qualification runs alongside two disjoint M6 product slices under D51.
 M5 T1 and T2 are independently accepted at `18acc8b` and `96b893c03b03c5a7ccdee10c116342f9e5eeadce`, and their combined candidate will run the new real plugin browser case first and the prior regression as a disjoint group.
 M4 is delivered at `2ff45690d46c4d42a8435f0e6bd3885091627933` after 266 pytest and 37 Vitest passes and all 76 distinct Chromium cases, including 17 affected cases after the layout fix and exact evidence transfer to master.
 M5 Plan Review passed with same-version plugin events and identical rerun inputs clarified, and its disjoint workers can start from the accepted M4 runtime.
