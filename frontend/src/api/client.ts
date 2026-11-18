@@ -1,4 +1,8 @@
 import { notifications } from '@mantine/notifications';
+import { createElement } from 'react';
+import { decodeFrame } from './frame';
+import type { FrameArray } from './frame';
+import type { AnalyzerCatalog, AnalyzerCurveData, AnalyzerLaneResult, AnalyzerRequest, AnalyzerResult, AnalyzerScalarResult, AnalyzerSpectrum, EventInterval } from './types';
 import type { AudioDevices, Lane, LaneEdit, MixdownRequest, RecordArm, RecordCalibrate, RecordStart, RecordState, SaveSubtype } from './types';
 
 const params = new URLSearchParams(location.search);
@@ -22,7 +26,9 @@ export async function request(path: string, init: RequestInit = {}): Promise<Res
   });
   if (!response.ok) {
     const error = await response.json() as { error: string; detail: string; traceback: string | null };
-    notifications.show({ title: error.error, message: `${error.detail}${error.traceback ? `\n${error.traceback}` : ''}`, color: 'red', autoClose: false });
+    const message = error.traceback ? createElement('div', null, error.detail, createElement('details',
+      { className: 'api-traceback' }, createElement('summary', null, 'Traceback'), createElement('pre', null, error.traceback))) : error.detail;
+    notifications.show({ title: error.error, message, color: 'red', autoClose: false });
     throw new ApiError(error.detail, response.status);
   }
   return response;
@@ -59,4 +65,27 @@ export function calibrateRecording(settings: RecordCalibrate) {
 }
 export function mixdown(settings: MixdownRequest) {
   return json<{ path: string; clipping: boolean }>('/mixdown', body(settings));
+}
+
+export function analyzers() {
+  return json<AnalyzerCatalog>('/analyzers');
+}
+export async function analyze(id: string, input: AnalyzerRequest): Promise<AnalyzerResult> {
+  const response = await request(`/analyzers/${encodeURIComponent(id)}/run`, body(input));
+  if (response.headers.get('Content-Type')?.includes('application/json')) {
+    return await response.json() as AnalyzerLaneResult | AnalyzerScalarResult;
+  }
+  const { header, arrays } = decodeFrame(await response.arrayBuffer());
+  const data = arrays as Record<string, FrameArray>;
+  return { ...(header as unknown as Pick<AnalyzerSpectrum, 'kind' | 'lanes' | 'result'>),
+    frequencies: data.freqs.data as Float32Array, values: data.values.data as Float32Array };
+}
+export async function analyzerCurveData(id: string, signal: AbortSignal): Promise<AnalyzerCurveData> {
+  const response = await request(`/lanes/${id}/data`, { signal });
+  const { arrays } = decodeFrame(await response.arrayBuffer());
+  const data = arrays as Record<string, FrameArray>;
+  return { times: data.times.data as Float32Array, values: data.values.data as Float32Array };
+}
+export function analyzerEvents(id: string, signal: AbortSignal) {
+  return json<{ items: EventInterval[] }>(`/lanes/${id}/data`, { signal });
 }

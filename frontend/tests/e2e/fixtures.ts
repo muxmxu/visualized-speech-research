@@ -1,15 +1,17 @@
 import { test as base } from '@playwright/test';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { createInterface } from 'node:readline';
 
-interface Server { url: string; token: string; audio: string; bytes: Buffer; process: ChildProcess }
+interface Server { url: string; token: string; audio: string; bytes: Buffer; plugins: string; process: ChildProcess }
 export const test = base.extend<{ server: Server }>({
   server: async ({ browserName }, use) => {
     if (browserName !== 'chromium') throw new Error(`Unexpected browser: ${browserName}`);
     const home = await mkdtemp(join(tmpdir(), 'vsr-e2e-'));
+    const plugins = join(home, 'plugins');
+    await mkdir(plugins);
     const samples = 8000;
     const bytes = Buffer.alloc(44 + samples * 2);
     bytes.write('RIFF', 0); bytes.writeUInt32LE(bytes.length - 8, 4); bytes.write('WAVEfmt ', 8);
@@ -29,7 +31,7 @@ export const test = base.extend<{ server: Server }>({
       process.stderr.resume();
       if (!ready) throw new Error(`Server exited before startup completed: ${process.exitCode}`);
       const runtime = JSON.parse(await readFile(join(home, 'runtime.json'), 'utf8')) as { port: number; token: string };
-      await use({ url: `http://127.0.0.1:${runtime.port}`, token: runtime.token, audio, bytes, process });
+      await use({ url: `http://127.0.0.1:${runtime.port}`, token: runtime.token, audio, bytes, plugins, process });
     } finally {
       if (process.exitCode === null && process.signalCode === null) { process.kill('SIGTERM'); await new Promise<void>(resolveExit => process.once('exit', () => resolveExit())); } await rm(home, { recursive: true, force: true });
     }

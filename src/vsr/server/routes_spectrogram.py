@@ -250,6 +250,8 @@ def register_spectrogram(app, session, find, heavy, budget):
         with session.lock:
             lane = find(lane_id)
             kind = lane.kind
+            if kind not in {"audio", "feature"}:
+                raise HTTPException(422, "Spectrogram requires an audio or feature lane")
             data, sr, offset, version = lane.data, lane.sr, lane.offset, lane.version
             rate, frame_t0, axis, scale = (
                 lane.frame_rate,

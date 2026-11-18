@@ -14,16 +14,28 @@ class NoEligibleFrames(ValueError):
     """No complete analysis frames satisfy the activity criterion."""
 
 
-def active_frames(x, sr):
+def activity_geometry(sr):
+    return round(0.02 * sr), round(0.01 * sr)
+
+
+def frame_rms(x, sr):
     x = input_tensor(x).mean(dim=0)
-    win, hop = round(0.02 * sr), round(0.01 * sr)
+    win, hop = activity_geometry(sr)
     if x.numel() < win:
-        return (torch.empty(0, dtype=torch.float32), torch.empty(0, dtype=torch.bool))
+        empty = x.new_empty(0)
+        return empty, empty
     frames = x.unfold(0, win, hop)
     rms = frames.square().mean(dim=-1).sqrt()
     times = (
         torch.arange(len(rms), dtype=torch.float32, device=compute_device()) * hop + win / 2
     ) / sr
+    return times, rms
+
+
+def active_frames(x, sr):
+    times, rms = frame_rms(x, sr)
+    if rms.numel() == 0:
+        return times.cpu(), rms.new_empty(0, dtype=torch.bool).cpu()
     return times.cpu(), ((rms > rms.max() * 0.01) & (rms > 10 ** (-70 / 20))).cpu()
 
 
@@ -78,8 +90,7 @@ def spectrum(
             if not active.any():
                 raise NoEligibleFrames("No eligible activity frames")
             active = active.to(compute_device())
-            activity_hop = round(0.01 * sr)
-            activity_win = round(0.02 * sr)
+            activity_win, activity_hop = activity_geometry(sr)
             activity_centers = (
                 torch.arange(len(times), device=compute_device()) * (2 * activity_hop)
                 + activity_win

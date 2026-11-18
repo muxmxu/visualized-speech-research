@@ -17,6 +17,7 @@ from zipfile import BadZipFile
 
 import numpy as np
 from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from fastapi.concurrency import run_in_threadpool
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel, Field, FiniteFloat, TypeAdapter, model_validator
@@ -24,6 +25,7 @@ from scipy.signal import get_window, resample_poly
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 import vsr.api as api
+from vsr.analyzers.registry import Registry
 from vsr.config import home, load_config
 from vsr.device import select_device
 from vsr.dsp.edit import masked_interval
@@ -43,6 +45,7 @@ from vsr.io.tensors import (
     tensor_tree,
 )
 from vsr.presets import preset_definitions, resolve_preset
+from vsr.server.routes_analyzers import register_analyzers
 from vsr.server.routes_edit import register_edit
 from vsr.server.routes_record import register_record
 from vsr.server.routes_spectrogram import register_spectrogram
@@ -163,6 +166,7 @@ def create_app(
         for identifier in pending_opens:
             arm_open(identifier, pending_opens[identifier])
         try:
+            await run_in_threadpool(analyzers.refresh)
             async with recording.lifespan():
                 yield
         finally:
@@ -173,6 +177,7 @@ def create_app(
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
     config = load_config()
+    analyzers = Registry(config["plugin_dirs"])
     cache_bytes = config["cache_bytes"]
     session = Session(history_budget=cache_bytes)
     app.state.session = session
@@ -407,7 +412,10 @@ def create_app(
     async def patch_lane(lane_id: str, body: LanePatch):
         with session.lock:
             lane = find(lane_id)
-            for key, value in body.model_dump(exclude_unset=True, exclude_none=True).items():
+            changes = body.model_dump(exclude_unset=True, exclude_none=True)
+            if "offset" in changes:
+                session.set_offset(lane, changes.pop("offset"))
+            for key, value in changes.items():
                 setattr(lane, key, value)
             result = lane.metadata()
         await connections.broadcast()
@@ -417,8 +425,8 @@ def create_app(
     async def delete_lane(lane_id: str):
         with session.lock:
             find(lane_id)
-            session.lanes[:] = [lane for lane in session.lanes if lane.id != lane_id]
-            session.forget_closed_lane(lane_id)
+            for removed in session.remove_lanes({lane_id}):
+                session.forget_closed_lane(removed)
         await connections.broadcast()
         return {"ok": True}
 
@@ -622,6 +630,7 @@ def create_app(
             headers={"Cache-Control": "no-store"},
         )
 
+    register_analyzers(app, session, find, connections, _heavy_compute, analyzers)
     register_edit(app, session, find_audio, _heavy_compute, connections)
     recording = register_record(
         app, session, find_audio, connections, Path(config["recordings_dir"]).expanduser().resolve()
@@ -633,13 +642,14 @@ def create_app(
         return app.state.settings
 
     @app.post("/api/settings")
-    async def set_settings(body: SettingsRequest):
+    def set_settings(body: SettingsRequest):
         with session.cache_lock:
             app.state.settings = select_device(body.compute_device)
             api._device = app.state.settings["compute_device"]
             session.cache.clear()
             session.cache_size = 0
             session.cache_generation += 1
+            analyzers.clear_results()
         return app.state.settings
 
     @app.websocket("/ws")

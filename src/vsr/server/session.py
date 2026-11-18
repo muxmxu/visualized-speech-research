@@ -1,4 +1,4 @@
-"""In-memory audio and feature lanes."""
+"""In-memory lanes and grouped session history."""
 
 from collections import OrderedDict, deque
 from dataclasses import dataclass, field
@@ -12,7 +12,7 @@ import torch
 class Lane:
     name: str
     source: str
-    data: torch.Tensor
+    data: torch.Tensor | None
     sr: int
     id: str = field(default_factory=lambda: uuid4().hex[:8])
     kind: str = "audio"
@@ -30,6 +30,14 @@ class Lane:
     frame_t0: float = 0.0
     freq_axis: dict | None = None
     value_scale: str | None = None
+
+    times: torch.Tensor | None = None
+    values: torch.Tensor | None = None
+    unit: str | None = None
+    y_scale: str = "linear"
+    overlay: bool = False
+    labels: list[str] = field(default_factory=list)
+    items: list[tuple[float, float, str]] = field(default_factory=list)
     _content_version: int = 0
     _saved_content_version: int = 0
 
@@ -38,15 +46,42 @@ class Lane:
         self.dirty = False
 
     def metadata(self) -> dict:
-        fields = {"data", "frame_rate", "frame_t0", "freq_axis", "value_scale"}
+        fields = {
+            "data",
+            "frame_rate",
+            "frame_t0",
+            "freq_axis",
+            "value_scale",
+            "times",
+            "values",
+            "unit",
+            "y_scale",
+            "overlay",
+            "labels",
+            "items",
+        }
         meta = {
             key: value
             for key, value in vars(self).items()
             if key not in fields and not key.startswith("_")
         }
+        if self.kind != "audio":
+            del meta["record_warnings"]
+        if self.kind == "curve":
+            curves, points = self.values.shape
+            return meta | {
+                "unit": self.unit,
+                "y_scale": self.y_scale,
+                "overlay": self.overlay,
+                "labels": self.labels,
+                "curves": curves,
+                "points": points,
+                "duration": float(self.times.numpy().max()) if points else 0.0,
+            }
+        if self.kind == "events":
+            return meta | {"duration": max((end for _, end, _ in self.items), default=0.0)}
         rows, frames = self.data.shape
         if self.kind == "feature":
-            del meta["record_warnings"]
             return meta | {
                 "rows": rows,
                 "frames": frames,
@@ -75,7 +110,6 @@ class RecordingMetadata:
     def apply(self, lane: Lane) -> None:
         lane.source = self.source
         lane.sr = self.sr
-        lane.offset = self.offset
         lane.record_warnings = self.record_warnings
         lane._saved_content_version = self.saved_content_version
 
@@ -110,14 +144,52 @@ class Session:
     def lane(self, lane_id: str) -> Lane:
         return next(lane for lane in self.lanes if lane.id == lane_id)
 
+    def descendants(self, lane_id: str):
+        pending = [lane_id]
+        while pending:
+            parent = pending.pop()
+            for lane in self.lanes:
+                if lane.parent == parent:
+                    pending.append(lane.id)
+                    yield lane
+
+    def set_offset(self, lane: Lane, offset: float) -> None:
+        delta = offset - lane.offset
+        lane.offset = offset
+        for child in self.descendants(lane.id):
+            child.offset += delta
+
+    def mark_derived_stale(self, lane_id: str) -> None:
+        for child in self.descendants(lane_id):
+            child.stale = True
+
+    def remove_lanes(self, lane_ids: set[str]) -> set[str]:
+        removed = lane_ids | {
+            child.id for lane_id in lane_ids for child in self.descendants(lane_id)
+        }
+        self.lanes[:] = [lane for lane in self.lanes if lane.id not in removed]
+        return removed
+
+    def publish_derived(self, lane: Lane) -> None:
+        for index, previous in enumerate(self.lanes):
+            if previous.parent == lane.parent and previous.source == lane.source:
+                lane.id = previous.id
+                lane.name = previous.name
+                lane.version = previous.version + 1
+                lane.gain_db, lane.mute, lane.solo = previous.gain_db, previous.mute, previous.solo
+                self.set_offset(previous, lane.offset)
+                self.mark_derived_stale(previous.id)
+                self.forget_closed_lane(previous.id)
+                self.lanes[index] = lane
+                return
+        self.lanes.append(lane)
+
     def _set_content(self, lane: Lane, data: torch.Tensor, content_version: int) -> None:
         lane.data = data
         lane.version += 1
         lane._content_version = content_version
         lane.dirty = content_version != lane._saved_content_version
-        for child in self.lanes:
-            if child.parent == lane.id:
-                child.stale = True
+        self.mark_derived_stale(lane.id)
 
     def _limit_history(self) -> None:
         used = sum(group.nbytes for group in self.undo_history) + sum(
@@ -161,7 +233,9 @@ class Session:
         self.redo_history.clear()
         for lane, data in updates:
             if lane.id in recordings:
-                recordings[lane.id].apply(lane)
+                recording = recordings[lane.id]
+                self.set_offset(lane, recording.offset)
+                recording.apply(lane)
             self._set_content(lane, data, lane.version + 1)
         self.lanes.extend(created)
         self._limit_history()
@@ -182,6 +256,7 @@ class Session:
             if lane_id in group.recordings:
                 previous = group.recordings[lane_id]
                 group.recordings[lane_id] = RecordingMetadata.from_lane(lane)
+                self.set_offset(lane, previous.offset)
                 previous.apply(lane)
             self._set_content(lane, data, content_version)
             changed.append(lane)
@@ -192,7 +267,9 @@ class Session:
             changed.extend(group.created)
         else:
             created_ids = {lane.id for lane in group.created}
-            self.lanes[:] = [lane for lane in self.lanes if lane.id not in created_ids]
+            removed = self.remove_lanes(created_ids)
+            for lane_id in removed - created_ids:
+                self.forget_closed_lane(lane_id)
         target.append(group)
         self._limit_history()
         return changed

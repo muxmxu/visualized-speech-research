@@ -1,4 +1,4 @@
-import type { FeatureLane, FrequencyAxis, MelSettings, SessionLane } from '../api/types';
+import type { AnnotationLane, FeatureLane, FrequencyAxis, MelSettings, SessionLane } from '../api/types';
 
 export interface Preset {
   name: string; sr: number; n_fft: number; win_length: number; hop: number;
@@ -16,6 +16,14 @@ export interface SpectralView extends ViewStyle {
 }
 export interface FeatureView extends ViewStyle { kind: 'feature' }
 export type ViewConfig = SpectralView | FeatureView;
+interface AnnotationView { id: string; laneId: string; kind: 'curve' | 'events'; height: number }
+export type LaneView = ViewConfig | AnnotationView;
+export function isSpectralView(view: LaneView): view is ViewConfig {
+  return view.kind === 'audio' || view.kind === 'feature';
+}
+export function viewForAnnotation(lane: AnnotationLane): AnnotationView {
+  return { id: crypto.randomUUID(), laneId: lane.id, kind: lane.kind, height: 120 };
+}
 export type ViewPatch = Partial<Omit<SpectralView, 'kind'>>;
 
 function viewStyle(laneId: string, f_lo: number, f_hi: number): ViewStyle {
