@@ -6,6 +6,7 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+M4 T1 and T2 passed independent checks, with six pytest passes and one Chromium workflow, and exact audited trees were committed as `5707ed37eb1a40b15d8e94e66966bc88ec69da5f` and `8923f76f788cd308576dcf3024fe32149b14d805`.
 The 0.1.0 candidate at `fbb5061a2828c80f76f844c56225a46db058e8fa` passed clean-wheel smoke and all seven measurements after independent review, and formal R1.7 and R1.8 remain pending B2 and the Human publication scan.
 M4 T1 and T2 started from exact product bytes at `2b448df` with disjoint paths, with idle WS state implicit so new record-state events preserve existing idle client behavior.
 The C2 and M4 Plan Review passed with two incorporated §11 clarifications about exclusive overdub trimming and completion warning notifications, and M4 backend and browser authoring can begin in parallel.
