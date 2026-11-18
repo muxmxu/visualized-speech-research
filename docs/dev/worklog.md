@@ -6,6 +6,7 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+M1-T6's first T-F selection tree passed 35 Vitest and 23 Chromium cases and independent mechanical audit, but semantic review 1 reproduced stale audition ownership after lane closure, lost E-tool hover and a missing ordinary-selection floating Play action, so correction is active.
 M1-T5 correction closed all three reproduced Frequency Analysis defects, passed independent audit 2 with 32 Vitest and nine Chromium cases and semantic review 2, and was committed locally as `20b42ec5e870a47035aa137e62540603a1709d77` by the D38 executor.
 M1-T5's first frozen Frequency Analysis tree passed 31 Vitest and six Chromium cases and independent mechanical audit, but semantic review 1 reproduced display-only extra spectrum requests, stale curve relabeling and a valid Welch interval suppressed by frontend rounding, so correction is active.
 M1-T4b correction closed all three semantic review 1 findings, passed independent audit 2 with 42 Chromium and 29 Vitest cases and semantic review 2, and was committed locally by the D38 executor as `b2babb0c9fc8bc8a639a51910581dafb30075131`.
