@@ -4,7 +4,7 @@ interface LaneMetadata {
 }
 
 export interface Lane extends LaneMetadata {
-  kind: 'audio'; channels: number; samples: number;
+  kind: 'audio'; channels: number; samples: number; dirty: boolean;
 }
 
 export type MelSettings = { n_mels: number; fmin: number; fmax: number; htk: boolean };
@@ -29,3 +29,16 @@ export type OpenResult = TensorIntake | { lanes: SessionLane[] };
 
 export interface Settings { compute_device: string; available_devices: string[]; self_check: Record<string, number> | null; reason: string | null }
 export interface Directory { path: string; entries: { name: string; is_dir: boolean; size: number; mtime: number }[] }
+
+export type EditOperation = 'delete' | 'cut' | 'copy' | 'paste' | 'silence' | 'insert_silence' |
+  'trim' | 'gain' | 'normalize' | 'fade_in' | 'fade_out' | 'invert' | 'mixdown_channels' |
+  'spectral_attenuate' | 'spectral_extract';
+export interface LaneEdit {
+  op: EditOperation; t0?: number; t1?: number; channel?: number;
+  params?: {
+    gain_db?: number | '-inf'; target_dbfs?: number; duration_s?: number; curve?: 'linear' | 'equal-power';
+    lane_ids?: string[]; f_lo?: number; f_hi?: number; n_fft?: number; win_length?: number;
+    window?: string; window_param?: number;
+  };
+}
+export type SaveSubtype = 'PCM_16' | 'PCM_24' | 'FLOAT';

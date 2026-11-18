@@ -125,7 +125,7 @@ for (const viewport of [{ width: 1280, height: 720, name: 'desktop' }, { width: 
     await page.getByRole('button', { name: 'Copy spec' }).scrollIntoViewIfNeeded();
     await expect(page.getByRole('button', { name: 'Copy spec' })).toBeInViewport();
     if (viewport.name === 'narrow') {
-      for (const target of [page.getByLabel('Directory'), page.locator('.lane.selected-view').getByLabel('Lane name'), page.locator('.lane.selected-view').getByLabel('Gain'), page.locator('.lane.selected-view').getByLabel('Offset'), page.getByRole('button', { name: 'Copy spec' }), page.getByLabel('Start', { exact: true })]) {
+      for (const target of [page.getByLabel('Directory'), page.locator('.lane.selected-view').getByLabel('Lane name'), page.locator('.lane.selected-view').getByRole('spinbutton', { name: 'Gain', exact: true }), page.locator('.lane.selected-view').getByLabel('Offset'), page.getByRole('button', { name: 'Copy spec' }), page.getByLabel('Start', { exact: true })]) {
         await target.focus();
         await expect(target).toBeFocused();
         await page.keyboard.press('Tab');

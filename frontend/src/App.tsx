@@ -4,17 +4,19 @@ import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { PointerEvent as ReactPointerEvent } from 'react';
 import { notifications } from '@mantine/notifications';
-import { IconPlayerPlay, IconPlayerPause, IconPlayerStop, IconRepeat, IconCursorText, IconArrowsMove } from '@tabler/icons-react';
-import { body, json, request, token } from './api/client';
+import { Loader, Modal } from '@mantine/core';
+import { IconPlayerPlay, IconPlayerPause, IconPlayerStop, IconRepeat, IconCursorText, IconArrowsMove, IconDots } from '@tabler/icons-react';
+import { ApiError, body, editLane, json, request, saveLane, stepHistory, token } from './api/client';
 import { decodeFrame } from './api/frame';
 import type { FrameArray } from './api/frame';
 import { laneDuration } from './api/types';
-import type { Directory, Lane, OpenResult, SessionLane, Settings, TensorIntake } from './api/types';
+import type { Directory, EditOperation, Lane, LaneEdit, OpenResult, SaveSubtype, SessionLane, Settings, TensorIntake } from './api/types';
 import { drawWaveform, waveformUpdates } from './render/waveform';
 import { fit, pan, zoom, formatTime, yToFrequency } from './state/viewport';
 import { SpectralLabels, SpectralLane } from './lanes/SpectralLane';
 import { ExportSelection } from './lanes/ExportSelection';
 import { TfSelection } from './lanes/TfSelection';
+import { EditMenu, SelectionActions, type SelectionCommands } from './lanes/SelectionActions';
 import type { TfSelection as TfSelectionState } from './state/tfSelection';
 import { Display } from './panels/Display';
 import { FrequencyAnalysis } from './panels/FrequencyAnalysis';
@@ -30,6 +32,17 @@ import { exposePlayback, exposeSpectra } from './audio/testHook';
 
 function report(error: unknown) { notifications.show({ title: 'Request failed', message: String(error), color: 'red' }); }
 function run(action: Promise<unknown>) { void action.catch(report); }
+
+type Menu = { x: number; y: number } & ({ kind: 'lane'; lane: Lane } | { kind: 'time'; lane: Lane } | { kind: 'frequency' } | { kind: 'empty' });
+const editFields = {
+  gain: { title: 'Gain', label: 'Gain (dB)', value: 0 },
+  normalize: { title: 'Normalize', label: 'Target peak (dBFS)', value: -1 },
+  insert_silence: { title: 'Insert silence', label: 'Duration (seconds)', value: 1 },
+  fade_in: { title: 'Fade in', label: 'Curve', value: 'linear' },
+  fade_out: { title: 'Fade out', label: 'Curve', value: 'linear' },
+} as const;
+type EditField = keyof typeof editFields;
+type EditDialog = { op: EditField; submit: (params: LaneEdit['params']) => void };
 
 type QueuedTensor = { id: number; tensor: TensorIntake; remember: boolean };
 type LaunchResult = TensorIntake | { lanes: SessionLane[]; interpretations: TensorIntake[] };
@@ -83,9 +96,9 @@ function WaveCanvas({ lane, view, channel }: { lane: Lane; view: Viewport; chann
   return <canvas ref={ref} aria-label={`Waveform ${lane.name}`} />;
 }
 
-function LanePlot({ lane, view, onWidth, selection, setSelection, setPlayhead, setSelected, tool, moveLane, playhead, channel, children, mode, split, setSplit, onHover, onPlaySelection, isSelected, canPlay }: { lane: SessionLane; view: Viewport; onWidth: (width: number) => void; selection: [number, number] | null; setSelection: (value: [number, number] | null) => void; setPlayhead: (value: number) => void; setSelected: (id: string) => void; tool: 'time' | 'move' | 'frequency'; moveLane: (offset: number) => void; playhead: number; channel: number; children: React.ReactNode; mode: SpectralView['mode']; split: number; setSplit: (value: number) => void; onHover: (event: ReactPointerEvent<HTMLDivElement> | null) => void; onPlaySelection: () => void; isSelected: boolean; canPlay: boolean }) {
+function LanePlot({ lane, view, onWidth, selection, setSelection, setPlayhead, tool, moveLane, playhead, channel, children, mode, split, setSplit, onHover, commands, working, onTimeGroup, onMenu, showSelection, isSelected }: { lane: SessionLane; view: Viewport; onWidth: (width: number) => void; selection: [number, number] | null; setSelection: (value: [number, number] | null) => void; setPlayhead: (value: number) => void; tool: 'time' | 'move' | 'frequency'; moveLane: (offset: number) => void; playhead: number; channel: number; children: React.ReactNode; mode: SpectralView['mode']; split: number; setSplit: (value: number) => void; onHover: (event: ReactPointerEvent<HTMLDivElement> | null) => void; commands?: SelectionCommands; working: boolean; onTimeGroup: (extend: boolean, grouped: boolean) => void; onMenu: (x: number, y: number) => void; showSelection: boolean; isSelected: boolean }) {
   const root = useRef<HTMLDivElement>(null);
-  const drag = useRef<number | null>(null);
+  const drag = useRef<{ start: number; keepSelection: boolean } | null>(null);
   const handle = useRef<0 | 1 | null>(null);
   useEffect(() => {
     const element = root.current;
@@ -94,12 +107,43 @@ function LanePlot({ lane, view, onWidth, selection, setSelection, setPlayhead, s
     observer.observe(element);
     return () => observer.disconnect();
   }, [onWidth]);
-  function time(event: ReactPointerEvent<HTMLDivElement>) { return view.t0 + (event.clientX - event.currentTarget.getBoundingClientRect().left) * view.secondsPerPx; }
-  return <div ref={root} className="wave" onPointerDown={event => { if (event.button !== 0) return; event.currentTarget.setPointerCapture(event.pointerId); drag.current = time(event); setPlayhead(drag.current); if (!event.shiftKey && tool === 'time') setSelection(null); setSelected(lane.id); }} onPointerMove={event => { onHover(event); if (handle.current !== null && selection) { const fixed = selection[1 - handle.current]; const moving = time(event); handle.current = moving < fixed ? 0 : 1; setSelection([Math.min(fixed, moving), Math.max(fixed, moving)]); } else if (drag.current !== null && tool === 'time') { const start = event.shiftKey && selection ? selection[0] : drag.current; setSelection([Math.min(start, time(event)), Math.max(start, time(event))]); } }} onPointerLeave={() => onHover(null)} onPointerUp={event => { if (tool === 'move' && drag.current !== null) moveLane(lane.offset + time(event) - drag.current); drag.current = null; handle.current = null; }} onDoubleClick={() => setSelection([lane.offset, lane.offset + laneDuration(lane)])}>
+  function time(event: { clientX: number; currentTarget: HTMLDivElement }) { return view.t0 + (event.clientX - event.currentTarget.getBoundingClientRect().left) * view.secondsPerPx; }
+  return <div ref={root} className="wave" onPointerDown={event => {
+    if (event.button !== 0) return;
+    event.currentTarget.setPointerCapture(event.pointerId);
+    const start = time(event);
+    const grouped = event.metaKey || event.ctrlKey;
+    drag.current = { start, keepSelection: grouped && selection !== null };
+    setPlayhead(start);
+    if (tool === 'time') {
+      onTimeGroup(event.shiftKey, grouped);
+      if (!event.shiftKey && !grouped) setSelection(null);
+    }
+  }} onPointerMove={event => {
+    onHover(event);
+    if (handle.current !== null && selection) {
+      const fixed = selection[1 - handle.current];
+      const moving = time(event);
+      handle.current = moving < fixed ? 0 : 1;
+      setSelection([Math.min(fixed, moving), Math.max(fixed, moving)]);
+    } else if (drag.current && tool === 'time' && !drag.current.keepSelection) {
+      const start = event.shiftKey && selection ? selection[0] : drag.current.start;
+      const finish = time(event);
+      setSelection([Math.min(start, finish), Math.max(start, finish)]);
+    }
+  }} onPointerLeave={() => onHover(null)} onPointerUp={event => {
+    if (tool === 'move' && drag.current) moveLane(lane.offset + time(event) - drag.current.start);
+    drag.current = null;
+    handle.current = null;
+  }} onDoubleClick={() => setSelection([lane.offset, lane.offset + laneDuration(lane)])} onContextMenu={event => {
+    const at = time(event);
+    if (!commands || !showSelection || !selection || at < selection[0] || at > selection[1]) return;
+    event.preventDefault(); event.stopPropagation(); onMenu(event.clientX, event.clientY);
+  }}>
     {lane.kind === 'audio' && <div className="waveform-part" style={{ height: mode === 'W' ? '100%' : mode === 'S' ? 0 : `${split * 100}%` }}><WaveCanvas lane={lane} view={view} channel={channel} /></div>}{children}
     {mode === 'W+S' && <div className="split-resizer" style={{ top: `${split * 100}%` }} onPointerDown={event => { event.stopPropagation(); event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { event.stopPropagation(); if (event.currentTarget.hasPointerCapture(event.pointerId)) { const rect = (event.currentTarget.parentElement as HTMLElement).getBoundingClientRect(); setSplit(Math.max(0.1, Math.min(0.9, (event.clientY - rect.top) / rect.height))); } }} onPointerUp={event => event.stopPropagation()} />}
     <div className="playhead" style={{ position: 'absolute', left: (playhead - view.t0) / view.secondsPerPx, top: 0, bottom: 0, width: 1, background: '#ffd166', pointerEvents: 'none' }} />
-    {selection && <div className="selection" style={{ left: (selection[0] - view.t0) / view.secondsPerPx, width: (selection[1] - selection[0]) / view.secondsPerPx }}>{canPlay && isSelected && selection[1] > selection[0] && <div className="time-toolbar" onPointerDown={event => event.stopPropagation()}><button title="Play time selection (Space)" onClick={onPlaySelection}>▶</button></div>}{([0, 1] as const).map(index => <div key={index} className={`selection-handle handle-${index}`} onPointerDown={event => { event.stopPropagation(); event.currentTarget.parentElement?.parentElement?.setPointerCapture(event.pointerId); handle.current = index; }} />)}</div>}
+    {showSelection && selection && <div className="selection" style={{ left: (selection[0] - view.t0) / view.secondsPerPx, width: (selection[1] - selection[0]) / view.secondsPerPx }}>{commands && isSelected && selection[1] > selection[0] && <SelectionActions commands={commands} time disabled={working} />}{([0, 1] as const).map(index => <div key={index} className={`selection-handle handle-${index}`} onPointerDown={event => { event.stopPropagation(); event.currentTarget.parentElement?.parentElement?.setPointerCapture(event.pointerId); handle.current = index; }} />)}</div>}
   </div>;
 }
 
@@ -171,6 +215,7 @@ function OverviewWave({ lane, start, end }: { lane: Lane; start: number; end: nu
 
 export default function App() {
   const host = useRef<HTMLDivElement>(null);
+  const dockRef = useRef<DockviewComponent | null>(null);
   const overviewDrag = useRef<{ x: number; view: Viewport; mode: 'move' | 'start' | 'end' } | null>(null);
   const [targets, setTargets] = useState<Record<string, HTMLElement>>({});
   const [lanes, setLanes] = useState<SessionLane[]>([]); const [selected, setSelected] = useState('');
@@ -179,6 +224,14 @@ export default function App() {
   const [tool, setTool] = useState<'time' | 'move' | 'frequency'>('time');
   const [tfSelection, setTfSelection] = useState<TfSelectionState | null>(null);
   const [selection, setSelection] = useState<[number, number] | null>(null); const [playhead, setPlayhead] = useState(0);
+  const [timeGroup, setTimeGroup] = useState<string[]>([]);
+  const [menu, setMenu] = useState<Menu | null>(null);
+  const [editDialog, setEditDialog] = useState<EditDialog | null>(null);
+  const [saveDialog, setSaveDialog] = useState<{ lane: Lane; as: boolean } | null>(null);
+  const [shortcutHelp, setShortcutHelp] = useState(false);
+  const operation = useRef(false);
+  const [working, setWorking] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [directory, setDirectory] = useState<Directory | null>(null); const [path, setPath] = useState('~');
   const [tensorIntakes, setTensorIntakes] = useState<QueuedTensor[]>([]);
   const nextTensorId = useRef(0);
@@ -231,6 +284,8 @@ export default function App() {
       if (views.some(item => item.laneId === lane.id) || loading.current.has(lane.id)) continue;
       loading.current.add(lane.id);
       const addView = (next: ViewConfig) => {
+        loading.current.delete(lane.id);
+        if (!laneOrder.current.some(item => item.id === lane.id)) return;
         setViews(old => old.some(item => item.laneId === lane.id) ? old : [...old, next].sort((a, b) => laneOrder.current.findIndex(item => item.id === a.laneId) - laneOrder.current.findIndex(item => item.id === b.laneId)));
         setSelectedView(old => old || next.id); setSelected(old => old || lane.id);
       };
@@ -320,6 +375,7 @@ export default function App() {
   useEffect(() => {
     const element = host.current; if (!element) return;
     const dock = new DockviewComponent(element, { theme: themeDark, createComponent: options => { const panel = document.createElement('div'); panel.style.height = '100%'; return { element: panel, init: () => { setTargets(old => ({ ...old, [options.name]: panel })); } }; } });
+    dockRef.current = dock;
     const saved = localStorage.getItem('vsr-layout');
     if (saved) {
       dock.fromJSON(JSON.parse(saved) as SerializedDockview);
@@ -345,7 +401,7 @@ export default function App() {
     nameTabs();
     const listener = dock.onDidLayoutChange(() => { nameTabs(); localStorage.setItem('vsr-layout', JSON.stringify(dock.toJSON())); });
     const resize = new ResizeObserver(() => dock.layout(element.clientWidth, element.clientHeight)); resize.observe(element);
-    return () => { resize.disconnect(); listener.dispose(); dock.dispose(); };
+    return () => { resize.disconnect(); listener.dispose(); dockRef.current = null; dock.dispose(); };
   }, []);
   const start = Math.min(0, ...lanes.map(lane => lane.offset));
   const end = Math.max(0.001, ...lanes.map(lane => lane.offset + laneDuration(lane)));
@@ -379,15 +435,145 @@ export default function App() {
     const mask = tfSelection && selectedConfig ? { selection: tfSelection, view: selectedConfig } : undefined;
     run(player.play(audible, start, finish, loop, channels, (position, active) => { setPlayhead(position); setPlaying(active); setView(old => { const span = widthRef.current * old.secondsPerPx; return span > 0 && (position < old.t0 || position > old.t0 + span) ? { ...old, t0: Math.floor(position / span) * span } : old; }); }, undefined, undefined, mask));
   };
+  const activeAudio = active?.kind === 'audio' ? active : undefined;
+  const hasTimeSelection = selection !== null && selection[1] > selection[0];
+  const dismissMenu = () => setMenu(null);
+  const perform = (action: () => Promise<unknown>) => {
+    if (operation.current) return;
+    operation.current = true; setWorking(true);
+    const timer = window.setTimeout(() => setBusy(true), 300);
+    void action().catch((error: unknown) => { if (!(error instanceof ApiError)) report(error); }).finally(() => {
+      window.clearTimeout(timer); operation.current = false; setWorking(false); setBusy(false);
+    });
+  };
+  const edit = (lane: Lane, op: EditOperation, params?: LaneEdit['params']) => {
+    const requiresTime = op === 'delete' || op === 'cut' || op === 'trim' || op === 'spectral_extract';
+    if (requiresTime && !hasTimeSelection) return;
+    const insertion = op === 'paste' || op === 'insert_silence';
+    const bounds = insertion ? { t0: playhead } : hasTimeSelection ? { t0: selection[0], t1: selection[1] } : {};
+    const targets = timeGroup.includes(lane.id) ? audioLanes.filter(item => timeGroup.includes(item.id)) : [lane];
+    const laneIds = targets.slice(1).map(item => item.id);
+    const channel = lane.channels > 2 && laneIds.length === 0 && op !== 'mixdown_channels' ? channels[lane.id] ?? 0 : undefined;
+    perform(() => editLane(targets[0].id, { op, ...bounds, channel, params: laneIds.length ? { ...params, lane_ids: laneIds } : params }));
+  };
+  const editSpectrum = (op: 'spectral_attenuate' | 'spectral_extract', gain_db?: number | '-inf') => {
+    if (!tfSelection) return;
+    const config = audioViews.find(item => item.id === tfSelection.viewId);
+    if (!config) return;
+    const { laneId, channel, t0, t1, f_lo, f_hi } = tfSelection;
+    const { n_fft, win_length, window, window_param } = config;
+    perform(() => editLane(laneId, { op, t0, t1, channel, params: { f_lo, f_hi, n_fft, win_length, window, window_param, gain_db } }));
+  };
+  const frequencyCommands: SelectionCommands = {
+    play: togglePlay, remove: () => editSpectrum('spectral_attenuate', '-inf'),
+    gain: db => editSpectrum('spectral_attenuate', db), extract: () => editSpectrum('spectral_extract'),
+  };
+  const timeCommands = (lane: Lane): SelectionCommands => ({
+    play: togglePlay, remove: () => edit(lane, 'delete'), gain: db => edit(lane, 'gain', { gain_db: db }),
+    extract: () => edit(lane, 'spectral_extract'),
+  });
+  const step = (direction: 'undo' | 'redo', lane = activeAudio ?? audioLanes.at(0)) => {
+    if (lane) perform(() => stepHistory(lane.id, direction));
+  };
+  const startSave = (lane: Lane, as = false) => {
+    const ordinary = /^(?:[\\/]|[a-z]:[\\/]).*\.(wav|flac)$/i.test(lane.source);
+    const unique = audioLanes.filter(item => item.source === lane.source).length === 1;
+    setSaveDialog({ lane, as: as || !ordinary || !unique });
+  };
+  const save = (lane: Lane, subtype: SaveSubtype, destination?: string) => perform(async () => {
+    try {
+      await saveLane(lane.id, subtype, destination);
+      setSaveDialog(null);
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.status !== 400 || destination !== undefined) throw error;
+      setSaveDialog({ lane, as: true });
+    }
+  });
+  const zoomSelection = (frequency: boolean) => {
+    if (frequency && tfSelection) setView(fit(tfSelection.t0, tfSelection.t1, width));
+    else if (hasTimeSelection) setView(fit(selection[0], selection[1], width));
+  };
+  const menuButton = (label: string, action: () => void, shortcut?: string, disabled = false) =>
+    <button title={shortcut ? `${label} (${shortcut})` : label} disabled={disabled} onClick={action}>{label}</button>;
+  const showEditDialog = (lane: Lane, op: EditField) => setEditDialog({ op, submit: params => edit(lane, op, params) });
+  const renderMenu = (current: Menu) => {
+    const frequency = current.kind === 'frequency';
+    const lane = 'lane' in current ? current.lane : activeAudio ?? audioLanes.at(0);
+    const selectionMenu = frequency || current.kind === 'time';
+    let items: React.ReactNode;
+    if (selectionMenu) {
+      const commands = frequency ? frequencyCommands : timeCommands(current.lane);
+      const silence = frequency ? commands.remove : () => edit(current.lane, 'silence');
+      const gain = frequency ? () => setEditDialog({ op: 'gain', submit: params => editSpectrum('spectral_attenuate', params?.gain_db) }) : () => showEditDialog(current.lane, 'gain');
+      items = <>{menuButton('Play', commands.play, 'Space')}
+        {menuButton('Delete', commands.remove, 'Delete / Backspace')}
+        {menuButton('Gain…', gain)}{menuButton('Silence', silence)}
+        {menuButton('Extract to new lane', commands.extract)}
+        {menuButton('Show in Frequency Analysis', () => dockRef.current?.api.getPanel('frequency-analysis')?.api.setActive())}
+        {menuButton('Zoom to selection', () => zoomSelection(frequency), 'Z')}</>;
+    } else {
+      items = <>{menuButton('Undo', () => step('undo', lane), 'Ctrl/Cmd+Z', !lane)}
+        {menuButton('Redo', () => step('redo', lane), 'Ctrl/Cmd+Shift+Z', !lane)}
+        {lane && <>
+          {current.kind === 'lane' && <>
+            {menuButton('Cut', () => edit(lane, 'cut'), 'Ctrl/Cmd+X', !hasTimeSelection)}
+            {menuButton('Copy', () => edit(lane, 'copy'), 'Ctrl/Cmd+C')}
+          </>}
+          {menuButton('Paste', () => edit(lane, 'paste'), 'Ctrl/Cmd+V')}
+          {current.kind === 'lane' && <>
+            {menuButton('Delete', () => timeCommands(lane).remove(), 'Delete / Backspace', !hasTimeSelection)}
+            {menuButton('Trim to selection', () => edit(lane, 'trim'), undefined, !hasTimeSelection)}
+            {menuButton('Silence', () => edit(lane, 'silence'))}
+            {menuButton('Insert silence…', () => showEditDialog(lane, 'insert_silence'))}
+            {menuButton('Gain…', () => showEditDialog(lane, 'gain'))}
+            {menuButton('Normalize…', () => showEditDialog(lane, 'normalize'))}
+            {menuButton('Fade in…', () => showEditDialog(lane, 'fade_in'))}
+            {menuButton('Fade out…', () => showEditDialog(lane, 'fade_out'))}
+            {menuButton('Invert polarity', () => edit(lane, 'invert'))}
+            {menuButton('Mix down channels to mono', () => edit(lane, 'mixdown_channels'))}
+            {menuButton('Extract to new lane', () => timeCommands(lane).extract(), undefined, !hasTimeSelection)}
+            {menuButton('Save…', () => startSave(lane), 'Ctrl/Cmd+S')}
+            {menuButton('Save As…', () => startSave(lane, true), 'Ctrl/Cmd+Shift+S')}
+          </>}
+        </>}
+        {current.kind === 'empty' && menuButton('Show all', () => setView(fit(start, end, width)), '0')}
+      </>;
+    }
+    return <EditMenu x={current.x} y={current.y} dismiss={dismissMenu}>{items}</EditMenu>;
+  };
+  useEffect(() => {
+    if (!menu) return;
+    const dismiss = (event: PointerEvent) => {
+      if (!(event.target as Element).closest('.edit-menu')) setMenu(null);
+    };
+    window.addEventListener('pointerdown', dismiss, true);
+    return () => window.removeEventListener('pointerdown', dismiss, true);
+  }, [menu]);
   useLayoutEffect(() => {
     const handler = (event: KeyboardEvent) => {
-      if (tensorIntakes.length || event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
+      if (event.key === 'Escape') dismissMenu();
+      if (tensorIntakes.length || editDialog || saveDialog || shortcutHelp || exporting || event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
+      const key = event.key.toLowerCase();
+      if (event.metaKey || event.ctrlKey) {
+        if (key === 'z') { event.preventDefault(); step(event.shiftKey ? 'redo' : 'undo'); }
+        if (activeAudio && (key === 'x' || key === 'c' || key === 'v')) {
+          event.preventDefault(); edit(activeAudio, key === 'x' ? 'cut' : key === 'c' ? 'copy' : 'paste');
+        }
+        if (key === 's' && activeAudio) { event.preventDefault(); startSave(activeAudio, event.shiftKey); }
+        return;
+      }
+      if (event.key === 'Delete' || event.key === 'Backspace') {
+        event.preventDefault();
+        if (tfSelection) frequencyCommands.remove();
+        else if (activeAudio) timeCommands(activeAudio).remove();
+      }
+      if (event.key === '?') setShortcutHelp(true);
       if (event.code === 'Space') { event.preventDefault(); togglePlay(); }
       if (event.key.toLowerCase() === 'l') setLoop(value => !value);
       if (event.key === '=' || event.key === '+') setView(v => zoom(v, width / 2, 0.5));
       if (event.key === '-') setView(v => zoom(v, width / 2, 2));
       if (event.key === '0') setView(fit(start, end, width));
-      if (event.key.toLowerCase() === 'z' && (tfSelection || selection)) { const interval = tfSelection ? [tfSelection.t0, tfSelection.t1] : selection as [number, number]; setView(fit(interval[0], interval[1], width)); }
+      if (key === 'z') zoomSelection(tfSelection !== null);
       if (event.key.toLowerCase() === 't') setTool('time');
       if (event.key.toLowerCase() === 'v') setTool('move');
       if (event.key.toLowerCase() === 'e') setTool('frequency');
@@ -480,7 +666,9 @@ export default function App() {
     files: <div className="panel files-panel"><form onSubmit={event => { event.preventDefault(); run(browse(path)); }}><button type="button" title="Parent directory" onClick={() => run(browse(`${path}/..`))}>..</button><input aria-label="Directory" title={path} value={path} onChange={event => setPath(event.target.value)} /><button title="Browse">Go</button></form><div className="file-list">{directory?.entries.map(entry => <button key={entry.name} title={entry.name} onDoubleClick={() => { const target = `${directory.path}/${entry.name}`; run(entry.is_dir ? browse(target) : open(target)); }} onKeyDown={event => { if (event.key === 'Enter' || event.code === 'Space') { event.preventDefault(); event.stopPropagation(); const target = `${directory.path}/${entry.name}`; run(entry.is_dir ? browse(target) : open(target)); } }}>{entry.is_dir ? '▸ ' : '♪ '}{entry.name}</button>)}</div><h4>Recent</h4>{recent.map(item => <button className="file" key={item} title={item} onClick={() => run(open(item))}>{item}</button>)}</div>,
     properties: <div className="panel">{active ? <><h3>{active.name}</h3><p>Sample rate: {active.sr} Hz</p><p>{active.kind === 'audio' ? `Channels: ${active.channels}` : `Rows: ${active.rows} · ${active.frame_rate.toFixed(2)} frames/s`}</p><p>Duration: {laneDuration(active).toFixed(3)} s</p><p>Source: {active.source}</p></> : 'Select a lane'}</div>,
     settings: <div className="panel">{settings && <><label>Compute device <select aria-label="Compute device" value={settings.compute_device} onChange={event => run(json<Settings>('/settings', body({ compute_device: event.target.value })).then(setSettings))}><option value="auto">auto</option>{settings.available_devices.map(device => <option key={device}>{device}</option>)}</select></label><p>Current: {settings.compute_device}</p><p>Self-check: {settings.self_check ? JSON.stringify(settings.self_check) : 'failed'}</p>{settings.reason && <p role="alert">{settings.reason}</p>}</>}</div>,
-    lanes: <div className="lanes" ref={plotHost} style={{ '--scrollbar-width': `${scrollbarWidth}px` } as React.CSSProperties} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); for (const file of event.dataTransfer.files) run(json<OpenResult>(`/upload?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file }).then(result => acceptOpen(result))); }}><div className={`timeline ${width < 350 ? 'compact' : ''}`}>{Array.from({ length: 6 }, (_, i) => <span key={i} style={{ left: `calc(var(--plot-left) + (100% - var(--plot-left) - var(--plot-right) - var(--scrollbar-width)) * ${i / 5})`, transform: i === 0 ? 'none' : i === 5 ? 'translateX(-100%)' : 'translateX(-50%)' }}>{(view.t0 + width * view.secondsPerPx * i / 5).toFixed(tickPrecision)}</span>)}</div><div className="overview" onPointerDown={event => { const rect = event.currentTarget.getBoundingClientRect(); const x = event.clientX - rect.left; const left = (view.t0-start) / extent * rect.width; const right = (view.t0 + width * view.secondsPerPx-start) / extent * rect.width; const mode = Math.abs(x - left) < 6 ? 'start' : Math.abs(x - right) < 6 ? 'end' : 'move'; overviewDrag.current = { x: event.clientX, view, mode }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { const drag = overviewDrag.current; if (!drag) return; const delta = (event.clientX - drag.x) / event.currentTarget.clientWidth * extent; const oldEnd = drag.view.t0 + width * drag.view.secondsPerPx; setView(drag.mode === 'move' ? { ...drag.view, t0: drag.view.t0 + delta } : drag.mode === 'start' ? fit(Math.min(oldEnd - 0.001, drag.view.t0 + delta), oldEnd, width) : fit(drag.view.t0, Math.max(drag.view.t0 + 0.001, oldEnd + delta), width)); }} onPointerUp={() => { overviewDrag.current = null; }}>{longest && <OverviewWave lane={longest} start={start} end={end} />}<div className="overview-box" style={{ left: `${(view.t0-start) / extent * 100}%`, width: `${width * view.secondsPerPx / extent * 100}%` }} /></div><canvas className="spectral-canvas" ref={glCanvas} /><div className="lane-list">{views.map(config => {
+    lanes: <div className="lanes" ref={plotHost} style={{ '--scrollbar-width': `${scrollbarWidth}px` } as React.CSSProperties} onDragOver={event => event.preventDefault()} onDrop={event => { event.preventDefault(); for (const file of event.dataTransfer.files) run(json<OpenResult>(`/upload?name=${encodeURIComponent(file.name)}`, { method: 'POST', body: file }).then(result => acceptOpen(result))); }}><div className={`timeline ${width < 350 ? 'compact' : ''}`}>{Array.from({ length: 6 }, (_, i) => <span key={i} style={{ left: `calc(var(--plot-left) + (100% - var(--plot-left) - var(--plot-right) - var(--scrollbar-width)) * ${i / 5})`, transform: i === 0 ? 'none' : i === 5 ? 'translateX(-100%)' : 'translateX(-50%)' }}>{(view.t0 + width * view.secondsPerPx * i / 5).toFixed(tickPrecision)}</span>)}</div><div className="overview" onPointerDown={event => { const rect = event.currentTarget.getBoundingClientRect(); const x = event.clientX - rect.left; const left = (view.t0-start) / extent * rect.width; const right = (view.t0 + width * view.secondsPerPx-start) / extent * rect.width; const mode = Math.abs(x - left) < 6 ? 'start' : Math.abs(x - right) < 6 ? 'end' : 'move'; overviewDrag.current = { x: event.clientX, view, mode }; event.currentTarget.setPointerCapture(event.pointerId); }} onPointerMove={event => { const drag = overviewDrag.current; if (!drag) return; const delta = (event.clientX - drag.x) / event.currentTarget.clientWidth * extent; const oldEnd = drag.view.t0 + width * drag.view.secondsPerPx; setView(drag.mode === 'move' ? { ...drag.view, t0: drag.view.t0 + delta } : drag.mode === 'start' ? fit(Math.min(oldEnd - 0.001, drag.view.t0 + delta), oldEnd, width) : fit(drag.view.t0, Math.max(drag.view.t0 + 0.001, oldEnd + delta), width)); }} onPointerUp={() => { overviewDrag.current = null; }}>{longest && <OverviewWave lane={longest} start={start} end={end} />}<div className="overview-box" style={{ left: `${(view.t0-start) / extent * 100}%`, width: `${width * view.secondsPerPx / extent * 100}%` }} /></div><canvas className="spectral-canvas" ref={glCanvas} /><div className="lane-list" onContextMenu={event => {
+      event.preventDefault(); setMenu({ kind: 'empty', x: event.clientX, y: event.clientY });
+    }}>{views.map(config => {
       const lane = lanes.find(item => item.id === config.laneId);
       if (!lane) return null;
       const index = lanes.indexOf(lane);
@@ -492,6 +680,7 @@ export default function App() {
       const channelList = audio && audio.channels <= 2 ? Array.from({ length: audio.channels }, (_, channel) => channel) : [selectedChannel];
       const labelColorbar = lane.kind === 'feature' || audioConfig?.transform === 'mel';
       const selectView = () => { setSelectedView(config.id); setSelected(lane.id); };
+      const openLaneMenu = (x: number, y: number) => { if (audio) { selectView(); setMenu({ kind: 'lane', lane: audio, x, y }); } };
       const update = (value: ViewPatch) => updateView(config.id, value);
       const hoverLane = (event: ReactPointerEvent<HTMLDivElement> | null) => {
         if (!event) { setHover(''); if (audio) queueAnalysisHover(null); return; }
@@ -526,8 +715,11 @@ export default function App() {
       };
       return <div className={`lane ${config.id === selectedView ? 'selected-view' : ''}`} key={config.id} style={{ height: config.height }}
         data-view-id={config.id} data-lane-id={lane.id} onPointerDown={selectView} onFocus={selectView}>
-        <div className="lane-header">
-          <input aria-label="Lane name" defaultValue={lane.name} key={lane.name} onBlur={event => patch(lane.id, { name: event.target.value })} />
+        <div className="lane-header" onContextMenu={event => {
+          if (!audio) return;
+          event.preventDefault(); event.stopPropagation(); openLaneMenu(event.clientX, event.clientY);
+        }}>
+          <div className="lane-name">{audio?.dirty && <span title="Unsaved changes" aria-label="Unsaved changes">•</span>}<input aria-label="Lane name" defaultValue={lane.name} key={lane.name} onBlur={event => patch(lane.id, { name: event.target.value })} /></div>
           <div>{lane.sr} Hz · {lane.kind === 'audio' ? `${lane.channels} ch` : `${lane.rows} rows`} · {laneDuration(lane).toFixed(2)} s</div>
           <div className="lane-actions">
             {audio && <><button title="Mute" className={audio.mute ? 'active' : ''} onClick={() => patch(lane.id, { mute: !audio.mute })}>M</button>
@@ -539,9 +731,12 @@ export default function App() {
               setViews(old => { const at = old.findIndex(item => item.id === config.id); return [...old.slice(0, at + 1), next, ...old.slice(at + 1)]; });
               setSelectedView(next.id); setSelected(lane.id);
             }}>+</button>
+            {audio && <button title="Edit and save lane" aria-label="Edit and save lane" onClick={event => {
+              const box = event.currentTarget.getBoundingClientRect(); openLaneMenu(box.left, box.bottom);
+            }}><IconDots size={13} /></button>}
             <button title="Close lane" onClick={() => {
               if (views.filter(item => item.laneId === lane.id).length > 1) setViews(old => old.filter(item => item.id !== config.id));
-              else run(request(`/lanes/${lane.id}`, { method: 'DELETE' }));
+              else if (!audio?.dirty || window.confirm(`Discard unsaved changes to ${lane.name}?`)) run(request(`/lanes/${lane.id}`, { method: 'DELETE' }));
             }}>×</button>
           </div>
           {audio && <>
@@ -552,16 +747,25 @@ export default function App() {
           <label>Offset <input aria-label="Offset" type="number" defaultValue={lane.offset} key={lane.offset} onBlur={event => patch(lane.id, { offset: Number(event.target.value) })} /></label>
         </div>
         <FrequencyAxis config={config} lane={lane} frame={frames.current.get(`${config.id}:${channelList[0]}`)?.frame} change={update} />
-        <LanePlot lane={lane} view={view} isSelected={config.id === selectedView} canPlay={audioLanes.length > 0}
-          onPlaySelection={togglePlay} mode={mode} split={split} setSplit={split => update({ split })} onHover={hoverLane}
-          onWidth={setWidth} selection={selection} setSelection={value => { setTfSelection(null); setSelection(value); }}
-          playhead={playhead} channel={selectedChannel} setPlayhead={setPlayhead} setSelected={selectView} tool={tool} moveLane={offset => patch(lane.id, { offset })}>
+        <LanePlot lane={lane} view={view} isSelected={config.id === selectedView} working={working}
+          commands={audio && timeCommands(audio)} mode={mode} split={split} setSplit={split => update({ split })} onHover={hoverLane}
+          onWidth={setWidth} selection={selection} showSelection={!timeGroup.length || timeGroup.includes(lane.id)}
+          setSelection={value => { setTfSelection(null); setSelection(value); }}
+          onMenu={(x, y) => { if (audio) { selectView(); setMenu({ kind: 'time', lane: audio, x, y }); } }}
+          onTimeGroup={(extend, grouped) => {
+            if (!audio) { setTimeGroup([]); return; }
+            if (grouped) setTimeGroup(old => Array.from(new Set([...old, lane.id])));
+            else if (extend && timeGroup.includes(lane.id)) return;
+            else setTimeGroup([lane.id]);
+          }}
+          playhead={playhead} channel={selectedChannel} setPlayhead={setPlayhead} tool={tool} moveLane={offset => patch(lane.id, { offset })}>
           {mode !== 'W' && <div className="spectral-stack" style={{ height: mode === 'S' ? '100%' : `${(1 - split) * 100}%` }}>
             {channelList.map(channel => <SpectralLane key={channel} lane={lane} config={config} view={view} channel={channel} onFrame={onFrame}>
               {audioConfig && (tool === 'frequency' || tfSelection?.viewId === config.id) && <TfSelection active={tool === 'frequency'} laneId={lane.id}
                 channel={channel} config={{ ...audioConfig, yscale: viewScale(audioConfig) }} viewport={view} selection={tfSelection}
-                setSelection={value => { setSelection(null); selectView(); setTfSelection(value); }} play={togglePlay}
-                zoom={() => { if (tfSelection) setView(fit(tfSelection.t0, tfSelection.t1, width)); }} />}
+                setSelection={value => { setSelection(null); setTimeGroup([]); selectView(); setTfSelection(value); }}
+                commands={frequencyCommands} disabled={working} onMenu={(x, y) => setMenu({ kind: 'frequency', x, y })}
+                menu={menu?.kind === 'frequency' && tfSelection?.viewId === config.id && tfSelection.channel === channel && renderMenu(menu)} />}
             </SpectralLane>)}
           </div>}
         </LanePlot>
@@ -581,5 +785,49 @@ export default function App() {
       </div>;
     })}</div></div>,
   };
-  return <><header><strong>vsr</strong><div className="toolbar-group"><button title="Play / pause" disabled={!audioLanes.length} onClick={togglePlay}>{playing ? <><IconPlayerPause size={14} />Pause</> : <><IconPlayerPlay size={14} />Play</>}</button><button title="Stop" onClick={() => { playback.current?.stop(tfSelection?.t0 ?? (selection ? selection[0] : 0)); setPlayhead(tfSelection?.t0 ?? (selection ? selection[0] : 0)); setPlaying(false); }}><IconPlayerStop size={14} />Stop</button><button title="Loop (L)" className={loop ? "active" : ""} aria-pressed={loop} onClick={() => setLoop(value => !value)}><IconRepeat size={14} />Loop</button></div><div className="toolbar-group"><button title="Export visible area to PDF" aria-label="Export visible area to PDF" aria-pressed={exporting} onClick={() => { if (exporting) finishExport(); else { exportRef.current = true; if (hoverFrame.current !== null) { cancelAnimationFrame(hoverFrame.current); hoverFrame.current = null; } setExporting(true); } }}>PDF</button><button title="Time selection (T)" className={tool === 'time' ? 'active' : ''} aria-pressed={tool === 'time'} onClick={() => setTool('time')}><IconCursorText size={14} />T</button><button title="Time-frequency selection (E)" className={tool === 'frequency' ? 'active' : ''} aria-pressed={tool === 'frequency'} onClick={() => setTool('frequency')}>E</button><button title="Move lane (V)" className={tool === 'move' ? 'active' : ''} aria-pressed={tool === 'move'} onClick={() => setTool('move')}><IconArrowsMove size={14} />V</button></div><div className={`toolbar-group measurements ${tfSelection ? "tf-measurements" : ""}`}><span>Playhead {formatTime(playhead)}</span>{(['Start', 'End', 'Duration'] as const).map((label, i) => <label key={label}>{label} <TimeInput label={label} value={tfSelection ? (i === 2 ? tfSelection.t1 - tfSelection.t0 : i === 0 ? tfSelection.t0 : tfSelection.t1) : selection ? (i === 2 ? selection[1] - selection[0] : selection[i]) : 0} onChange={n => { if (tfSelection) { const fixed = i === 0 ? tfSelection.t1 : tfSelection.t0; const moving = i === 2 ? fixed + n : n; const t0 = Math.min(fixed, moving); const t1 = Math.max(fixed, moving); setTfSelection({ ...tfSelection, t0, t1 }); return i === 2 ? t1 - t0 : i === 0 ? t0 : t1; } const current = selection ?? [0, 0]; const fixed = i === 0 ? current[1] : current[0]; const moving = i === 2 ? fixed + n : n; const next: [number, number] = [Math.min(fixed, moving), Math.max(fixed, moving)]; setSelection(next); return i === 2 ? next[1] - next[0] : next[i]; }} /></label>)}{tfSelection && (['Low Hz', 'High Hz'] as const).map((label, i) => <label key={label}>{label} <TimeInput label={label} value={i === 0 ? tfSelection.f_lo : tfSelection.f_hi} onChange={n => { const source = lanes.find(lane => lane.id === tfSelection.laneId); const bounded = Math.max(0, Math.min(source ? source.sr / 2 : n, n)); const next = i === 0 ? (bounded < tfSelection.f_hi ? { ...tfSelection, f_lo: bounded } : tfSelection) : (bounded > tfSelection.f_lo ? { ...tfSelection, f_hi: bounded } : tfSelection); setTfSelection(next); return i === 0 ? next.f_lo : next.f_hi; }} /></label>)}</div></header><div ref={host} className="dock" />{Object.entries(targets).map(([id, element]) => createPortal(panels[id], element, id))}{currentTensor && <TensorInterpretation key={currentTensor.id} tensor={currentTensor.tensor} close={closeTensor} opened={file => { if (currentTensor.remember) remember(file); closeTensor(); }} />}{exporting && <ExportSelection finish={finishExport} />}<footer>{hover || `${active?.name ?? ''} ${playhead.toFixed(3)} s`}</footer></>;
+  return <><header><strong>vsr</strong><div className="toolbar-group"><button title="Play / pause" disabled={!audioLanes.length} onClick={togglePlay}>{playing ? <><IconPlayerPause size={14} />Pause</> : <><IconPlayerPlay size={14} />Play</>}</button><button title="Stop" onClick={() => { playback.current?.stop(tfSelection?.t0 ?? (selection ? selection[0] : 0)); setPlayhead(tfSelection?.t0 ?? (selection ? selection[0] : 0)); setPlaying(false); }}><IconPlayerStop size={14} />Stop</button><button title="Loop (L)" className={loop ? "active" : ""} aria-pressed={loop} onClick={() => setLoop(value => !value)}><IconRepeat size={14} />Loop</button></div><div className="toolbar-group"><button title="Export visible area to PDF" aria-label="Export visible area to PDF" aria-pressed={exporting} onClick={() => { if (exporting) finishExport(); else { exportRef.current = true; if (hoverFrame.current !== null) { cancelAnimationFrame(hoverFrame.current); hoverFrame.current = null; } setExporting(true); } }}>PDF</button><button title="Time selection (T)" className={tool === 'time' ? 'active' : ''} aria-pressed={tool === 'time'} onClick={() => setTool('time')}><IconCursorText size={14} />T</button><button title="Time-frequency selection (E)" className={tool === 'frequency' ? 'active' : ''} aria-pressed={tool === 'frequency'} onClick={() => setTool('frequency')}>E</button><button title="Move lane (V)" className={tool === 'move' ? 'active' : ''} aria-pressed={tool === 'move'} onClick={() => setTool('move')}><IconArrowsMove size={14} />V</button></div><div className={`toolbar-group measurements ${tfSelection ? "tf-measurements" : ""}`}><span>Playhead {formatTime(playhead)}</span>{(['Start', 'End', 'Duration'] as const).map((label, i) => <label key={label}>{label} <TimeInput label={label} value={tfSelection ? (i === 2 ? tfSelection.t1 - tfSelection.t0 : i === 0 ? tfSelection.t0 : tfSelection.t1) : selection ? (i === 2 ? selection[1] - selection[0] : selection[i]) : 0} onChange={n => { if (tfSelection) { const fixed = i === 0 ? tfSelection.t1 : tfSelection.t0; const moving = i === 2 ? fixed + n : n; const t0 = Math.min(fixed, moving); const t1 = Math.max(fixed, moving); setTfSelection({ ...tfSelection, t0, t1 }); return i === 2 ? t1 - t0 : i === 0 ? t0 : t1; } const current = selection ?? [0, 0]; const fixed = i === 0 ? current[1] : current[0]; const moving = i === 2 ? fixed + n : n; const next: [number, number] = [Math.min(fixed, moving), Math.max(fixed, moving)]; setSelection(next); return i === 2 ? next[1] - next[0] : next[i]; }} /></label>)}{tfSelection && (['Low Hz', 'High Hz'] as const).map((label, i) => <label key={label}>{label} <TimeInput label={label} value={i === 0 ? tfSelection.f_lo : tfSelection.f_hi} onChange={n => { const source = lanes.find(lane => lane.id === tfSelection.laneId); const bounded = Math.max(0, Math.min(source ? source.sr / 2 : n, n)); const next = i === 0 ? (bounded < tfSelection.f_hi ? { ...tfSelection, f_lo: bounded } : tfSelection) : (bounded > tfSelection.f_lo ? { ...tfSelection, f_hi: bounded } : tfSelection); setTfSelection(next); return i === 0 ? next.f_lo : next.f_hi; }} /></label>)}</div></header><div ref={host} className="dock" />{Object.entries(targets).map(([id, element]) => createPortal(panels[id], element, id))}{currentTensor && <TensorInterpretation key={currentTensor.id} tensor={currentTensor.tensor} close={closeTensor} opened={file => { if (currentTensor.remember) remember(file); closeTensor(); }} />}{exporting && <ExportSelection finish={finishExport} />}
+    {menu && menu.kind !== 'frequency' && createPortal(renderMenu(menu), document.body)}
+    {editDialog && <Modal opened onClose={() => setEditDialog(null)} title={editFields[editDialog.op].title}>
+      <form className="edit-form" onSubmit={event => {
+        event.preventDefault();
+        const value = new FormData(event.currentTarget).get('value') as string;
+        const op = editDialog.op;
+        const params = op === 'gain' ? { gain_db: Number(value) } : op === 'normalize' ? { target_dbfs: Number(value) }
+          : op === 'insert_silence' ? { duration_s: Number(value) } : { curve: value as 'linear' | 'equal-power' };
+        editDialog.submit(params); setEditDialog(null);
+      }}>
+        <label>{editFields[editDialog.op].label}
+          {editDialog.op === 'fade_in' || editDialog.op === 'fade_out'
+            ? <select name="value"><option value="linear">Linear</option><option value="equal-power">Equal power</option></select>
+            : <input name="value" type="number" step="any" required defaultValue={editFields[editDialog.op].value}
+                min={editDialog.op === 'insert_silence' ? 1e-6 : undefined} max={editDialog.op === 'normalize' ? 0 : undefined} />}
+        </label>
+        <button title="Apply edit" disabled={working}>Apply</button>
+      </form>
+    </Modal>}
+    {saveDialog && <Modal opened onClose={() => setSaveDialog(null)} title={saveDialog.as ? 'Save As' : 'Overwrite original file'}>
+      <form key={`${saveDialog.lane.id}-${saveDialog.as}`} className="edit-form" onSubmit={event => {
+        event.preventDefault();
+        const fields = new FormData(event.currentTarget);
+        save(saveDialog.lane, fields.get('subtype') as SaveSubtype, saveDialog.as ? fields.get('path') as string : undefined);
+      }}>
+        {saveDialog.as ? <label>Destination path<input name="path" placeholder="/path/to/audio.wav" required /></label>
+          : <p>Overwrite {saveDialog.lane.source}?</p>}
+        <label>Subtype<select name="subtype" defaultValue="PCM_24">
+          <option value="PCM_16">PCM_16</option><option value="PCM_24">PCM_24</option><option value="FLOAT">FLOAT</option>
+        </select></label>
+        <button title={saveDialog.as ? 'Save to destination' : 'Confirm overwrite'} disabled={working}>{saveDialog.as ? 'Save' : 'Overwrite'}</button>
+      </form>
+    </Modal>}
+    {shortcutHelp && <Modal opened onClose={() => setShortcutHelp(false)} title="Keyboard shortcuts">
+      <dl className="shortcut-list">{[
+        ['T / E / V', 'Time selection / T-F selection / Move lane'], ['Space / L', 'Play or stop / Toggle loop'],
+        ['Delete / Backspace', 'Delete selection'], ['Ctrl/Cmd+X / C / V', 'Cut / Copy / Paste'],
+        ['Ctrl/Cmd+Z / Shift+Z', 'Undo / Redo'], ['Ctrl/Cmd+S / Shift+S', 'Save / Save As'],
+        ['= / − / 0 / Z', 'Zoom in / Zoom out / Show all / Zoom to selection'], ['Home / End', 'Move playhead to start / end'],
+        ['Shift+drag / Ctrl/Cmd+drag', 'Extend time selection / Add lane to selection'],
+      ].map(([shortcut, description]) => <div key={shortcut}><dt>{shortcut}</dt><dd>{description}</dd></div>)}</dl>
+    </Modal>}
+    {busy && <div className="edit-progress" role="status"><Loader size="xs" /> Working…</div>}
+    <footer>{hover || `${active?.name ?? ''} ${playhead.toFixed(3)} s`}</footer></>;
 }

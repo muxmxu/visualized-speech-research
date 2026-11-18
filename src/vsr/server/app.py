@@ -43,6 +43,7 @@ from vsr.io.tensors import (
     tensor_tree,
 )
 from vsr.presets import preset_definitions, resolve_preset
+from vsr.server.routes_edit import register_edit
 from vsr.server.routes_spectrogram import register_spectrogram
 from vsr.server.session import Lane, Session
 from vsr.server.ws import Connections
@@ -169,7 +170,8 @@ def create_app(
             pending_opens.clear()
 
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
-    session = Session()
+    cache_bytes = load_config()["cache_bytes"]
+    session = Session(history_budget=cache_bytes)
     app.state.session = session
     if launch_id is not None:
         register_open(launch_id, paths or [])
@@ -413,6 +415,7 @@ def create_app(
         with session.lock:
             find(lane_id)
             session.lanes[:] = [lane for lane in session.lanes if lane.id != lane_id]
+            session.forget_closed_lane(lane_id)
         await connections.broadcast()
         return {"ok": True}
 
@@ -616,7 +619,8 @@ def create_app(
             headers={"Cache-Control": "no-store"},
         )
 
-    register_spectrogram(app, session, find, _heavy_compute, load_config()["cache_bytes"])
+    register_edit(app, session, find_audio, _heavy_compute, connections)
+    register_spectrogram(app, session, find, _heavy_compute, cache_bytes)
 
     @app.get("/api/settings")
     async def settings():
