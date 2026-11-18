@@ -18,10 +18,12 @@ The original first twelve DESIGN items retain their order and thresholds, and M1
 Use `AGENTS.md`, `LIFECYCLE.md`, the effective ignored `ORCHESTRATION.md` CODEX table, the `impl` skill, the applicable DESIGN sections, D38 and this plan in each dispatch.
 Record the standing authorization boundary and source references in each handoff, and use the local host contract for browser selection and resource bindings.
 The independent `astra(medium)` [M1 Plan Review](reports/plan-review-M1.md) returned FAIL.
-This is the sole Planner amendment and binds all four findings to arch A1 or the tasks below.
+The sole amendment responding to that Plan Review binds all four findings to arch A1 or the tasks below.
 Dispatch follows the CODEX amendment rule and the listed dependencies.
 The Controller records the proposal, scope and base for the authorized protected-section exception before dispatching A1.
 T4 also implements the H54 workspace repairs from [the UI consultation](reports/ui-design-consult-H54.md), using existing DESIGN §9 controls, palette and dependencies.
+During T4 implementation the Worker reproduced a preexisting duplicate-source lane deletion crash on the accepted T3 backend.
+The phase dispatch order below inserts T4a after T4 and governs advancement to T5 in the [T4 task plan](reports/M1-T4-task-plan.md).
 
 ## Execution and checks
 
@@ -33,10 +35,11 @@ T4 also implements the H54 workspace repairs from [the UI consultation](reports/
 | M1-T2 | M1-T1 | `terra(high)`, multi-module cache and transport | high | `sol(xhigh)` | Task Planner `sol(medium)` for chunk, pyramid and coalescing boundaries |
 | M1-T3 | M1-T2 and the A2 D43 contract | `terra(high)`, multi-module mask and PCM | high | `sol(xhigh)` | Task Planner `sol(medium)` for absolute grids and resampling margins under D43 |
 | M1-T4 | M1-T3 | `terra(high)`, multi-module rendering, view state and H54 workspace design | high | `sol(high)` | Task Planner `sol(medium)` for viewport/scissor, request timing, responsive layout and browser pixel evidence |
-| M1-T5 | M1-T4 | `terra(high)`, multi-module analysis panel | normal | `sol(high)` | No, use §8.4 and the completed recon |
+| M1-T4a | M1-T4 | `terra(high)`, single-module bug fix | normal | `terra(high)` | No, the reproducible case and executable checks are below |
+| M1-T5 | M1-T4a | `terra(high)`, multi-module analysis panel | normal | `sol(high)` | No, use §8.4 and the completed recon |
 | M1-T6 | M1-T5 | `terra(high)`, multi-module selection and transport | high | `sol(high)` | No, use §9.2, §9.4, §9.6 and T3 contract |
 | M1-T7 | M1-T6 | `terra(high)`, multi-module browser composition and PDF | high | `astra(medium)` for the particularly complex cross-layer and file-format verification | Task Planner `sol(medium)` with the accepted arch delta and recon |
-| M1-T8 | M1-T1 through T7 | `terra(high)`, final integration and benchmark | high | `sol(high)` | No, use LIFECYCLE Integration and the benchmark definitions below |
+| M1-T8 | M1-T1 through T7, including T4a | `terra(high)`, final integration and benchmark | high | `sol(high)` | No, use LIFECYCLE Integration and the benchmark definitions below |
 
 An independent `luna(xhigh)` Mechanical Auditor precedes the named semantic Reviewer for every task.
 Record the actual model and effort, and dispatch an independent `terra(medium)` Auditor under the CODEX fallback if the runtime lacks Luna.
@@ -53,7 +56,7 @@ Implicit writes include `.venv/`, `.ruff_cache/`, `.pytest_cache/`, `__pycache__
 Run Python commands from the worktree root and frontend commands from `frontend/`.
 Use the existing Chromium path from the host contract through `VSR_E2E_CHROMIUM` or the Playwright install procedure in DESIGN §20.
 
-Use `task/arch-A1`, `phase/arch`, `task/M1-T1` through `task/M1-T7` and `phase/M1`, preserving branch creation bases in the ledger.
+Use `task/arch-A1`, `phase/arch`, `task/M1-T1` through `task/M1-T7`, `task/M1-T4a` and `phase/M1`, preserving branch creation bases in the ledger.
 The first task branches from the integrated phase baseline, and each successor branches from its reviewed dependency as prescribed in LIFECYCLE Integration.
 D38 reserves Git commits and integration to the authorized independent top-level executor, with the integration Worker as final-tree writer and the Controller coordinating records and authorized pushes.
 The Auditor verifies the allowed paths, checks evidence on the current diff, runs `python3 scripts/check_diff_rules.py --base <recorded-cut-commit>` and performs the LIFECYCLE protection and public-repository checks.
@@ -162,6 +165,28 @@ Write `frontend/src/{App.tsx,styles.css}`, `frontend/src/api/{client,types}.ts`,
 Run `npm run typecheck && npm test && npm run lint && npm run build && npx playwright test --workers=1 tests/e2e/m1-spectrogram.spec.ts tests/e2e/m0-workspace.spec.ts`.
 Provide M1.8 and M1.9, browser evidence for viewport and hover, and the committed rendering surfaces for T6 and T7.
 
+## M1-T4a — Delete duplicate-source lanes by ID
+
+Restore the existing authenticated `DELETE /api/lanes/{id}` contract in DESIGN §7 and the `lanes_changed` session notification in §6.
+On accepted T3, opening the same WAV twice and deleting the second ID returns HTTP 500 because `session.lanes.remove(find(lane_id))` compares the first and second `Lane` values, reaching multi-element tensor equality.
+Branch `task/M1-T4a` from the independently accepted and D38-committed T4 tip, with the Controller binding its exact SHA, clean isolated worktree, toolchain, Chromium and locks in the private dispatch ledger.
+Write only `src/vsr/server/app.py` and `tests/test_server.py`, with the standard ignored task-local outputs above.
+Remove the lane by its existing ID under `session.lock`, preserving the order and data of surviving lanes, the existing 404 for an unknown ID, the success response and the post-mutation broadcast.
+Use the existing route, dependencies and specification.
+
+First add `test_delete_second_lane_with_same_source` in `tests/test_server.py` using the existing authenticated FastAPI `TestClient` and WebSocket pattern, `raise_server_exceptions=False`, a temporary VSR_HOME and a generated WAV with multiple samples.
+Open the same path in two authenticated requests, consume each open notification and verify the ordered session contains two distinct IDs with the same source.
+Delete the second ID and assert HTTP 200 with `{"ok": true}` before waiting on the socket, using the response body as the status assertion diagnostic.
+Then require `{"type": "lanes_changed"}` and an authenticated session response containing exactly the original first lane metadata.
+Repeat the deletion of the now-unknown second ID and require HTTP 404 with the existing error payload and the same surviving lane.
+Run `uv run pytest -ra tests/test_server.py::test_delete_second_lane_with_same_source` with only the test added and record the HTTP 500 and `RuntimeError` before correcting the handler, then rerun that command on the repaired tree.
+
+Run all AGENTS.md and LIFECYCLE checks on the final tree, including dependency setup and the full Python, Ruff, frontend typecheck, Vitest, lint, production build and Chromium suites.
+After the production build, rebuild served assets with `npm run build -- --mode test` and run `npx playwright test --workers=1` on the bound Chromium for the full e2e suite.
+Run `git diff --check` and `python3 scripts/check_diff_rules.py --base <T4-cut-SHA>`, and record changed-file hashes, the red and green regression results and the full check results.
+Require the separate Mechanical Auditor and semantic Reviewer specified above to verify the final tree, including the route behavior, regression evidence, write set and LIFECYCLE checks, with all REVIEW lines disposed.
+After both PASS verdicts, use the independent D38 executor to commit the reviewed two-file diff on the local task branch before dispatching T5 from that commit.
+
 ## M1-T5 — Frequency Analysis panel
 
 Deliver the docked frequency analysis UI using the committed framed spectrum endpoint and uPlot, with frame, Welch and full methods, supported statistics/units, linear/log frequency axis and multi-lane overlays.
@@ -207,8 +232,8 @@ Provide M1.13 and a screenshot of the crop interaction as human evidence.
 
 ## M1-T8 — Integration, regression, measurement and acceptance
 
-Deliver the accepted final M1 tree and `docs/acceptance/M1.md` after T1–T7 independent evidence is current and their writers have stopped.
-Write the cumulative T1–T7 implementation sets only for necessary integration fixes, `tests/bench/m1_spectrogram.py`, `tests/bench/m1_spectrogram.ts`, `docs/acceptance/M1.md` and append-only `docs/DESIGN.md` §21 as required by recorded decisions.
+Deliver the accepted final M1 tree and `docs/acceptance/M1.md` after T1–T7 independent evidence, including T4a, is current and their writers have stopped.
+Write the cumulative T1–T7 implementation sets, including T4a, only for necessary integration fixes, `tests/bench/m1_spectrogram.py`, `tests/bench/m1_spectrogram.ts`, `docs/acceptance/M1.md` and append-only `docs/DESIGN.md` §21 as required by recorded decisions.
 The post-squash write set on master is the measurement row in `docs/dev/performance.md`, which stays in the separate records commit.
 Use LIFECYCLE Integration and D38 to merge reviewed attempts and freeze the phase revision.
 Obtain independent Mechanical Auditor PASS on the full AGENTS commands and benchmark evidence and independent Task Reviewer PASS on that revision before the authorized executor squashes it.
@@ -291,7 +316,8 @@ The combined estimate is 60 agent invocations, comprising 49 baseline and 11 res
 The arch estimate is 10, with nine baseline invocations for a Plan Reviewer, the A1 and A2 Worker/Auditor/Reviewer triplets, an A1 D38 Git executor and an A2 post-verdict D38 continuation, plus one reserve.
 The M1 estimate is 50, with 40 baseline invocations for one completed Recon, two Overall Planners including the interrupted attempt, one Plan Reviewer, four Task Planners, eight Worker/Auditor/Reviewer triplets, seven task-level D38 Git executors and a T8 post-verdict D38 continuation, plus ten reserve.
 The baseline includes 15 `sol` and three `astra` invocations.
-The combined Planner amendment and H54 consultation consume two M1 reserve invocations, with the remaining reserve available for targeted fact checks, bounded rework and required verification.
+The combined Planner amendment and H54 consultation consume two M1 reserve invocations.
+The T4a insertion allocates five M1 reserve invocations for this Planner, the Worker/Auditor/Reviewer triplet and a D38 Git executor, with three reserve invocations left in the estimate for targeted fact checks, bounded rework and required verification.
 Track actual usage by role and phase, including Git executors and interrupted attempts.
 The 1.5× estimate-overrun checkpoints are 15 invocations for arch and 75 for M1 under the CODEX contract, with the Controller applying any recorded authorization covering the current phase before further dispatch.
 D42 records M0 continuation after its estimate, and the plan adds no paid compute or external cost.
