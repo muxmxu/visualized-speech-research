@@ -42,6 +42,11 @@ Focused check under the lock from `frontend/`: `npm run typecheck && npm run lin
 
 Merge accepted T1 and T2 with the D38 executor. Beyond the accepted patches the write set is `docs/DESIGN.md` (§21 append), `docs/plugins.md` (copyable full WORLD Harvest plugin and plugin install/use example), and `docs/acceptance/M5.md`. Worker `6.2-sol(high)`, independent Mechanical Auditor `6.2-sol(medium)` fallback and Task Reviewer `sol(high)`. Run the full AGENTS/LIFECYCLE check set once on new combined inputs and transfer passing results to the squash after D38 proves tested blob and mode identity. Rerun changed inputs only. Record all exits, screenshot and drift in Chinese, including the latest same-platform §17 measurements for reference. M5 adds no §17 row. Deliver one milestone commit before C2 candidate preparation.
 
+### Integration amendment A1 — Settings and the real analyzer workflow
+
+The combined pytest reproduced settings waiting behind the computation it must invalidate. In `src/vsr/server/app.py` remove the new heavy-compute acquisition from settings, and in `src/vsr/server/routes_analyzers.py` use the existing cache generation to avoid repopulating analyzer results across the invalidation. Retain the failing in-flight test unchanged and rerun affected settings checks.
+The real browser test saw the accessible Analyzer combobox and F0 option but its label lookup did not resolve the wrapped control. Use the exact combobox role/name in `frontend/tests/e2e/m5-analyzers.spec.ts`, retain all real workflow assertions and run the case before the previous-milestone browser group.
+
 | Exit | Planned evidence |
 | --- | --- |
 | M5.1 | With the real server running, write the Scalars plugin, refresh the list and Run it. Rewrite its source with a new mtime and the same declared version, then Run again without reloading the server. Set the integer Param once in the UI and hold the lane, selection, channel and all parameter values fixed across both calls. The source edit alone changes the result from 1.25 to 2.25, proving invalidation even with the same cache-key fields. |
