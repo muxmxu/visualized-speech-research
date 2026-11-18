@@ -6,6 +6,7 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+The reviewed M2 CLI launch contract D49 was integrated as spec-only commit `f37ad73676e7248654e9c9c60b4f3a82ac117e39`, with only DESIGN §§7 and 21 changed and all 92 other non-record blobs identical to fully tested M1.
 M2-T4's local show path now uses a direct loopback connection, passed exact authenticated PCM and zero proxy delivery regression with 84 selected tests and both independent reviews, and was committed locally as `9ed07af2cb0851d9777af735dd974718b132e832`.
 M2-T4 passed 83 selected tests and independent audit, but semantic review reproduced default local routing through an environment proxy, so the Worker is correcting the loopback request path.
 M2-T3 closed both semantic findings, passed 38 selected tests and two final independent reviews, and its four files were committed locally as `153cedca0c842d5a17c1f9b48fab09f255ab8a85`.
