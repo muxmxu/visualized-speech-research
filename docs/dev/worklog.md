@@ -6,6 +6,9 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-18 (C1 architecture and M1 planning)
 
+M1-T2's first implementation passed 53 targeted tests and a 1.234 GiB cold peak-RSS gate, but semantic review 1 found four log, empty-frame, memory and internal exception defects.
+The Worker repaired those findings, and independent audit 2 passed 60 tests with a 1.235 GiB cold peak RSS and no internal exception REVIEW.
+Semantic review 2 reproduced two remaining log-boundary defects, so the T2 task planner added the sole task amendment for representable minimum frequency and unbracketed empty bands.
 The independent M1-T2 task plan bound the five-path write set, absolute-grid and cache oracles, and the cold ten-minute peak-RSS gate before Worker dispatch.
 M1-T1's sole task amendment produced four failing zero-power Welch PSD regressions on the previous tree and 51 passing targeted tests after the repair.
 Final independent audit 3 and semantic review 3 passed, with the two conditional device skip REVIEW lines allowed.

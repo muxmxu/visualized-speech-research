@@ -119,3 +119,32 @@ The independent Mechanical Auditor reruns the T2 checks and scope/protection aud
 - [T1 final semantic review](M1-T1-review-3.md)
 - [DESIGN](../../../../DESIGN.md)
 - [LIFECYCLE](../../../../../LIFECYCLE.md)
+
+## Sole task amendment after semantic reviews 1 and 2
+
+The two consecutive FAILs are recorded in [review 1](M1-T2-review-1.md) and [review 2](M1-T2-review-2.md).
+This amendment addresses review 2's remaining log-frequency findings in `src/vsr/server/routes_spectrogram.py` and `tests/test_spectrogram.py` within the original task, allowed write set and checks.
+
+Enforce the DESIGN §8.3 minimum at the HTTP boundary as `f_lo >= max(20.0, sr / n_fft)` for log requests, evaluating `sr / n_fft` as the same representable frequency used for bin one.
+Return the existing structured 422 body when the requested lower edge is below the minimum.
+Use the accepted endpoint values and bin centers in one consistent numeric representation for exact half-open membership at the outer edges and every internal edge.
+At an internal geometric edge `i`, determine the side of a positive bin center `b` from the exact ordering of `b^H` and `f_lo^(H-i) * f_hi^i` or an equivalent comparison, with equality assigned to the upper band.
+Preserve the distinction between adjacent representable requests and remove the arbitrary near-integer snap.
+Preserve the accepted upper bound in `f_axis.hi`, including an odd FFT's valid viewport between the last bin center and Nyquist.
+For an empty band, interpolate in Hz only within an adjacent pair that brackets the geometric center, and return a structured 422 for any request with an unbracketed empty band.
+
+Add the following authenticated HTTP regressions before the route repair and record the failures on the review-2 tree.
+Use generated FLOAT WAVs and independent whole-lane centered Hann references, then verify decoded framed f16 values and coordinate metadata on successful requests.
+Verify the §7 `{error, detail, traceback}` body on each rejected request.
+
+| Request fixture | Required result |
+|---|---|
+| Eight nine-sample periods of `cos(2πi/9)/3` at 16 kHz, `n_fft=win_length=hop=9`, frame four, height 1, `f_hi=3500` Hz. | `f_lo=16000/9` encoded as `1777.7777777777778` returns 200, advertises that same bound and includes bin one, yielding −9.5390625 dB. One binary64 value below it, `1777.7777777777776`, returns 422. One above it, `1777.777777777778`, returns 200 and interpolates between bins one and two at the geometric center, yielding −11.96875 dB. Assert both successful row centers independently from the accepted bounds. |
+| Same 16 kHz fixture, `f_lo=0`. | Replace the previous success expectation with a structured 422 assertion because zero violates the request contract, preserving coverage under T1 alongside the valid equal-bound case and its two neighboring inputs. |
+| An FFT with `sr/n_fft < 20`, such as sr=1600 and n_fft=160, with an otherwise valid log viewport of 20–35 Hz containing bin centers. | A lower edge exactly at 20 Hz is accepted and one binary64 value below 20 Hz returns structured 422. |
+| Eight 160-sample periods of `cos(2π·2i/160)/3` at 16 kHz, `n_fft=win_length=hop=160`, frame four, log 100–400 Hz, height 2. | Keep exact 200 Hz internal-edge and neighboring-high-endpoint regressions. At `f_hi=400` the 200 Hz bin enters the upper band, yielding rows [−15.5625, −9.5390625] dB, while one float above 400 puts it in the lower band and one below leaves it in the upper band. On the same fixture, a one-row 100–200 Hz request excludes the 200 Hz bin and returns −15.5625 dB. |
+| Eight nine-sample periods of `cos(2π·4i/9)/3` at 9 kHz, `n_fft=win_length=hop=9`, frame four, height 2. | Keep the valid 1700–4400 Hz query with `f_axis.hi=4400`, geometric centers about 2156.25371248 and 3468.97953459 Hz, and the 4 kHz bin contributing −6.13671875 dB to the upper row. Replace the old extrapolation expectation for 4050–4400 Hz with a structured 422 assertion because both geometric centers exceed the last available bin at 4000 Hz. |
+
+Rerun the original checks and retain the prior strict-JSON, cold M1.10 RSS, byte LRU, bounded scalar reduction, cache and device invalidation, pyramid, same-key concurrency and failed-flight regressions.
+Obtain fresh independent mechanical and semantic verdicts on the final tree.
+Any further semantic FAIL makes T2 BLOCKED under the CODEX review cap.
