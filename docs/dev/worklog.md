@@ -6,6 +6,10 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-26 (M7 resumption)
 
+The final RIR review found that broadband math ran on the CPU and that long sweep retention could include circular negative lags.
+The initial T1 local commit eda1e03 was made during a review update and remains a correction parent only; master received no M7 code at that point.
+The two corrections stay within the original write sets and preserve previous criteria.
+
 The resumed session verified that master and all three task bases still match, retained the partial edits after the interrupted execution, and assigned the three existing scopes again under H60.
 
 ## 2026-11-18 (C1 architecture and M1 planning)
