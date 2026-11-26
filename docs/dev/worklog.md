@@ -4,6 +4,10 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 本文件进 git：Human 的原话以 H<n> 引用（原文在状态目录的 `human-inputs.md`），不写个人信息与机器信息（本机相关的内容写在状态目录的 `local.md`）。run 开始之前的设计与接入记录在本机状态目录的 `history/`，不在本仓库。
 
+## 2026-11-26 (M7 resumption)
+
+The resumed session verified that master and all three task bases still match, retained the partial edits after the interrupted execution, and assigned the three existing scopes again under H60.
+
 ## 2026-11-18 (C1 architecture and M1 planning)
 
 Arch-M7 exact source-only patch is delivered at `9a0b715aa5d532249e88d69161a5b3f03f0c67e3`; unchanged M6 runtime evidence is retained and the three disjoint reviewed M7 implementation branches proceed together.
