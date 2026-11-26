@@ -6,6 +6,9 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 ## 2026-11-26 (M7 resumption)
 
+The corrected RIR analysis and measurement and the browser implementation passed independent review and were committed as 37be2ae, abb69eb and bcc31fa.
+The measurement simulation measured −50.47 dB reconstruction error and zero samples of loopback delay error.
+
 The final RIR review found that broadband math ran on the CPU and that long sweep retention could include circular negative lags.
 The initial T1 local commit eda1e03 was made during a review update and remains a correction parent only; master received no M7 code at that point.
 The two corrections stay within the original write sets and preserve previous criteria.
