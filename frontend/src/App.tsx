@@ -39,8 +39,19 @@ import type { Viewport } from './state/viewport';
 import { Playback } from './audio/playback';
 import { exposePlayback, exposeSpectra } from './audio/testHook';
 
-function report(error: unknown) { notifications.show({ title: 'Request failed', message: String(error), color: 'red' }); }
+// request() has already shown the notification for an ApiError.
+function report(error: unknown) { if (!(error instanceof ApiError)) notifications.show({ title: 'Request failed', message: String(error), color: 'red' }); }
 function run(action: Promise<unknown>) { void action.catch(report); }
+
+// Browser storage is a trust boundary: anything but a JSON array of strings is an empty list.
+function storedRecent(): string[] {
+  let value: unknown;
+  try { value = JSON.parse(localStorage.getItem('vsr-recent') ?? '[]'); } catch (error) {
+    if (error instanceof SyntaxError) return [];
+    throw error;
+  }
+  return Array.isArray(value) && value.every((item): item is string => typeof item === 'string') ? value : [];
+}
 
 const idleRecording: RecordState = { type: 'record_state', state: 'idle', mapping: [], start_time: null, notice: null };
 const warningLabels: Record<RecordingWarning['type'], string> = {
@@ -88,9 +99,11 @@ function WaveCanvas({ lane, view, channel }: { lane: Lane; view: Viewport; chann
       drawWaveform(ctx, data.arrays, data.header, next, currentSize.width, currentSize.height, currentLane.sr, currentLane.offset);
     };
     const scheduler = waveformUpdates(draw, next => {
+      const { lane: currentLane, size: currentSize } = current.current;
+      // A hidden panel has zero width; its viewport is empty until the panel is shown again.
+      if (currentSize.width === 0) return;
       controller.current?.abort();
       const active = new AbortController(); controller.current = active;
-      const { lane: currentLane, size: currentSize } = current.current;
       const width = Math.max(1, Math.round(currentSize.width * 1.5));
       const t0 = next.t0 - currentSize.width * next.secondsPerPx * 0.25;
       const t1 = next.t0 + currentSize.width * next.secondsPerPx * 1.25;
@@ -171,13 +184,16 @@ function TimeInput({ label, value, onChange }: { label: string; value: number; o
     onChange={event => { const text = event.target.value; const number = Number(text); const result = onChange(number); setDraft(result === number ? text : String(result)); }} />;
 }
 
-function FrequencyAxis({ config, lane, frame, change }: { config: ViewConfig; lane: SessionLane; frame?: SpectralFrame; change: (patch: ViewPatch) => void }) {
+function FrequencyAxis({ config, lane, channels, frame, change }: { config: ViewConfig; lane: SessionLane; channels: number; frame?: SpectralFrame; change: (patch: ViewPatch) => void }) {
   const drag = useRef<{ y: number; lo: number; hi: number } | null>(null);
   const scale = viewScale(config);
   const isFeature = lane.kind === 'feature';
   const isMel = config.kind === 'audio' && config.transform === 'mel';
   const label = (frequency: number) => frequency >= 1000 ? `${(frequency / 1000).toFixed(frequency % 1000 ? 1 : 0)}k` : String(Math.round(frequency));
-  const height = config.kind === 'audio' && config.mode === 'W+S' ? `${config.split * 100}%` : 0;
+  // Stacked channel surfaces share the area below the waveform; each gets its own label set.
+  const top = config.kind === 'audio' && config.mode === 'W+S' ? config.split : 0;
+  const span = (1 - top) / channels;
+  const place = (channel: number) => ({ top: `${(top + span * channel) * 100}%`, bottom: `${span * (channels - 1 - channel) * 100}%` });
   const bounds = frequencyViewport(config);
   const packetLabels = (isFeature || isMel) && frame && frame.rows > 0
     ? [...new Set([0, Math.floor((frame.rows - 1) / 2), frame.rows - 1])].flatMap(row => {
@@ -204,9 +220,9 @@ function FrequencyAxis({ config, lane, frame, change }: { config: ViewConfig; la
         change({ f_lo: lo, f_hi: lo * ratio });
       }
     }} onPointerUp={() => { drag.current = null; }}>
-    {isFeature || isMel ? <div className="axis-labels packet-axis" style={{ top: height }}>
+    {Array.from({ length: channels }, (_, channel) => isFeature || isMel ? <div key={channel} className="axis-labels packet-axis" style={place(channel)}>
       <SpectralLabels labels={packetLabels} align="right" />
-    </div> : <div className="axis-labels" style={{ top: height }}><span>{label(config.f_hi)}</span><span>{label(scale === 'log' ? Math.sqrt(config.f_lo * config.f_hi) : (config.f_lo + config.f_hi) / 2)}</span><span>{label(config.f_lo)}</span></div>}
+    </div> : <div key={channel} className="axis-labels" style={place(channel)}><span>{label(config.f_hi)}</span><span>{label(scale === 'log' ? Math.sqrt(config.f_lo * config.f_hi) : (config.f_lo + config.f_hi) / 2)}</span><span>{label(config.f_lo)}</span></div>)}
   </div>;
 }
 
@@ -216,6 +232,7 @@ function OverviewWave({ lane, start, end }: { lane: Lane; start: number; end: nu
     const canvas = ref.current; if (!canvas) return;
     const controller = new AbortController();
     const observer = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width === 0) return;
       const width = Math.max(1, Math.round(entry.contentRect.width));
       void request(`/lanes/${lane.id}/waveform?${new URLSearchParams({ t0: String(start), t1: String(end), width: String(width) })}`, { signal: controller.signal }).then(r => r.arrayBuffer()).then(buffer => {
         const { arrays, header } = decodeFrame(buffer); const dpr = window.devicePixelRatio;
@@ -267,7 +284,7 @@ export default function App() {
     const queued = tensors.map(tensor => ({ id: nextTensorId.current++, tensor, remember }));
     setTensorIntakes(old => [...old, ...queued]);
   }, []);
-  const [recent, setRecent] = useState<string[]>(() => JSON.parse(localStorage.getItem('vsr-recent') ?? '[]') as string[]);
+  const [recent, setRecent] = useState(storedRecent);
   const [settings, setSettings] = useState<Settings | null>(null);
   const playback = useRef<Playback | null>(null);
   const [playing, setPlaying] = useState(false); const [loop, setLoop] = useState(false);
@@ -392,7 +409,13 @@ export default function App() {
   useEffect(() => { if (playback.current) run(playback.current.update(lanes.filter(lane => lane.kind === 'audio'), channels)); }, [lanes, channels]);
   useEffect(() => { playback.current?.setLoop(loop); }, [loop]);
   useEffect(() => () => { playback.current?.stop(); void playback.current?.context.close(); }, []);
-  const refresh = useCallback(async () => { const result = await json<{ lanes: WorkspaceLane[] }>('/session'); setLanes(result.lanes); }, []);
+  // Responses can arrive out of order; only the one for the latest request is applied.
+  const latestSession = useRef(0);
+  const refresh = useCallback(async () => {
+    const id = ++latestSession.current;
+    const result = await json<{ lanes: WorkspaceLane[] }>('/session');
+    if (id === latestSession.current) setLanes(result.lanes);
+  }, []);
   const refreshAnalyzers = useCallback(async () => { setCatalog(await analyzers()); }, []);
   const acceptRecordState = useCallback((state: RecordState) => {
     const previous = recordStateRef.current;
@@ -435,6 +458,11 @@ export default function App() {
     }));
     const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws?token=${encodeURIComponent(token)}`);
     socket.binaryType = 'arraybuffer';
+    // Lane changes broadcast before the socket registered are not replayed.
+    socket.onopen = () => run(refresh());
+    socket.onclose = () => notifications.show({
+      title: 'Connection to the vsr server was lost', message: 'Reload the page to reconnect.', color: 'red', autoClose: false,
+    });
     socket.onmessage = event => {
       const data: unknown = event.data;
       if (data instanceof ArrayBuffer) {
@@ -471,26 +499,36 @@ export default function App() {
           break;
       }
     };
-    return () => socket.close();
+    return () => { socket.onclose = null; socket.close(); };
   }, [refresh, browse, queueTensors, acceptRecordState, refreshAnalyzers]);
   useEffect(() => {
     const element = host.current; if (!element) return;
     const dock = new DockviewComponent(element, { theme: themeDark, createComponent: options => { const panel = document.createElement('div'); panel.style.height = '100%'; return { element: panel, init: () => { setTargets(old => ({ ...old, [options.name]: panel })); } }; } });
     dockRef.current = dock;
+    const sideWidth = Math.max(120, Math.min(240, Math.round(element.clientWidth * 0.18)));
     const saved = localStorage.getItem('vsr-layout');
-    if (saved) {
-      dock.fromJSON(JSON.parse(saved) as SerializedDockview);
-      if (!dock.api.getPanel('display')) {
-        const inspector = dock.api.getPanel('properties') ?? dock.api.getPanel('settings');
-        const previous = inspector?.group.activePanel;
-        dock.addPanel({ id: 'display', component: 'display', title: 'Display', position: inspector ? { referencePanel: inspector.id, direction: 'within' } : { referencePanel: 'lanes', direction: 'right' } });
-        previous?.api.setActive(); localStorage.setItem('vsr-layout', JSON.stringify(dock.toJSON()));
+    let restored = false;
+    // Browser storage is a trust boundary: a layout that does not parse or that dockview rejects is replaced by the default.
+    if (saved) try { dock.fromJSON(JSON.parse(saved) as SerializedDockview); restored = true; } catch (error) {
+      notifications.show({ title: 'Saved layout was reset', message: String(error), color: 'yellow' });
+    }
+    if (restored) {
+      // Re-add panels the user closed, each next to a panel that exists at that point.
+      if (!dock.api.getPanel('lanes')) {
+        const analysis = dock.api.getPanel('frequency-analysis');
+        dock.addPanel({ id: 'lanes', component: 'lanes', title: 'Lanes', position: analysis ? { referencePanel: analysis.id, direction: 'above' } : { direction: 'left' } });
+      }
+      if (!dock.api.getPanel('files')) dock.addPanel({ id: 'files', component: 'files', title: 'Files', position: { referencePanel: 'lanes', direction: 'left' }, initialWidth: sideWidth });
+      for (const [id, title] of [['properties', 'Properties'], ['settings', 'Settings'], ['display', 'Display']]) {
+        if (dock.api.getPanel(id)) continue;
+        const inspector = ['properties', 'settings', 'display', 'analyzers'].find(other => dock.api.getPanel(other));
+        dock.addPanel({ id, component: id, title, inactive: true, ...(inspector ? { position: { referencePanel: inspector, direction: 'within' } } : { position: { referencePanel: 'lanes', direction: 'right' }, initialWidth: sideWidth }) });
       }
     }
     else {
       dock.addPanel({ id: 'lanes', component: 'lanes', title: 'Lanes' });
-      dock.addPanel({ id: 'files', component: 'files', title: 'Files', position: { referencePanel: 'lanes', direction: 'left' }, initialWidth: Math.max(120, Math.min(240, Math.round(element.clientWidth * 0.18))) });
-      dock.addPanel({ id: 'properties', component: 'properties', title: 'Properties', position: { referencePanel: 'lanes', direction: 'right' }, initialWidth: Math.max(120, Math.min(240, Math.round(element.clientWidth * 0.18))) });
+      dock.addPanel({ id: 'files', component: 'files', title: 'Files', position: { referencePanel: 'lanes', direction: 'left' }, initialWidth: sideWidth });
+      dock.addPanel({ id: 'properties', component: 'properties', title: 'Properties', position: { referencePanel: 'lanes', direction: 'right' }, initialWidth: sideWidth });
       dock.addPanel({ id: 'settings', component: 'settings', title: 'Settings', position: { referencePanel: 'properties', direction: 'within' } });
       dock.addPanel({ id: 'display', component: 'display', title: 'Display', position: { referencePanel: 'properties', direction: 'within' } });
     }
@@ -578,7 +616,7 @@ export default function App() {
     if (operation.current) return;
     operation.current = true; setWorking(true);
     const timer = window.setTimeout(() => setBusy(true), 300);
-    void action().catch((error: unknown) => { if (!(error instanceof ApiError)) report(error); }).finally(() => {
+    void action().catch(report).finally(() => {
       window.clearTimeout(timer); operation.current = false; setWorking(false); setBusy(false);
     });
   };
@@ -1066,7 +1104,7 @@ export default function App() {
             </button>;
           })}</div>}
         </div>
-        {spectrum ? <FrequencyAxis config={spectrum.config} lane={spectrum.lane} frame={frames.current.get(`${config.id}:${channelList[0]}`)?.frame} change={update} />
+        {spectrum ? <FrequencyAxis config={spectrum.config} lane={spectrum.lane} channels={channelList.length} frame={frames.current.get(`${config.id}:${channelList[0]}`)?.frame} change={update} />
           : <div className="frequency-axis analyzer-axis">{lane.kind === 'curve' && lane.unit}</div>}
         <LanePlot lane={lane} view={view} isSelected={config.id === selectedView} working={working}
           commands={audio && timeCommands(audio)} mode={mode} split={split} setSplit={split => update({ split })} onHover={hoverLane}

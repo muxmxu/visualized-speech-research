@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from 'react';
 import { notifications } from '@mantine/notifications';
-import { request } from '../api/client';
+import { ApiError, request } from '../api/client';
 import { decodeFrame } from '../api/frame';
 import type { FrameArray } from '../api/frame';
 import type { SessionLane } from '../api/types';
@@ -47,7 +47,10 @@ export function SpectralLane({ lane, config, view, channel, onFrame, children }:
           const data = packet.data as Float32Array;
           onFrame(settings.id, selected, { ...grid, dtype: 'f32', data, extent: rawExtent(data) }, target);
         } else onFrame(settings.id, selected, { ...grid, mel, dtype: 'f16', data: packet.data as Uint16Array }, target);
-      }).catch((error: unknown) => { if (!(error instanceof DOMException && error.name === 'AbortError')) notifications.show({ title: 'Request failed', message: String(error), color: 'red' }); });
+      }).catch((error: unknown) => {
+        // request() has already shown the notification for an ApiError.
+        if (!(error instanceof DOMException && error.name === 'AbortError') && !(error instanceof ApiError)) notifications.show({ title: 'Request failed', message: String(error), color: 'red' });
+      });
     });
     schedule.current = updates;
     const observer = new ResizeObserver(() => updates.change(current.current.view)); observer.observe(target);

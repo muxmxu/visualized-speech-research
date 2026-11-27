@@ -1,5 +1,5 @@
 import { notifications } from '@mantine/notifications';
-import { request } from '../api/client';
+import { ApiError, request } from '../api/client';
 import { decodeFrame, type FrameArray } from '../api/frame';
 import type { Lane } from '../api/types';
 import type { TfSelection } from '../state/tfSelection';
@@ -109,8 +109,8 @@ export class Playback {
           } catch (error) {
             if (!failed) throw error;
             failed();
-            // request() already notified its plain Error for an HTTP failure.
-            if (!(error instanceof Error && error.constructor === Error)) notifications.show({ title: 'Request failed', message: String(error), color: 'red' });
+            // request() has already shown the notification for an ApiError.
+            if (!(error instanceof ApiError)) notifications.show({ title: 'Request failed', message: String(error), color: 'red' });
             return null;
           }
           const frame = decodeFrame(await response.arrayBuffer()).arrays as FrameArray;
