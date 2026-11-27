@@ -4,6 +4,13 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 本文件进 git：Human 的原话以 H<n> 引用（原文在状态目录的 `human-inputs.md`），不写个人信息与机器信息（本机相关的内容写在状态目录的 `local.md`）。run 开始之前的设计与接入记录在本机状态目录的 `history/`，不在本仓库。
 
+## 2026-11-27 (H62–H63: Docker Compose delivery)
+
+`docker compose up --build` built the frontend and locked Python runtime, and the local service returned the application page, bundled assets and authenticated session successfully.
+A Chromium browser inspection rendered the VSR toolbar and analysis panels without page errors.
+`docker compose down` removed the service container and network while preserving the named data volume, and the service was restarted for immediate use.
+Product commit `1fb636b` was pushed to `origin/master`.
+
 ## 2026-11-27 (C3 local 0.3.0 candidate)
 
 M7 was delivered and pushed at `befb2cc9fefefd1ed27b66ba460da387a596d4ae`, and the release candidate was prepared from records commit `c114597029b78c9325fd4f2c76a4784c23a81ce3`.
