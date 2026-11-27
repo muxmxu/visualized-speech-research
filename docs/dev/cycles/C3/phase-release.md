@@ -1,0 +1,8 @@
+# C3 release preparation — 0.3.0
+
+Start from delivered M7 and its exact reviewed production UI. One local candidate preparation task. External distribution R3.7 waits separately for existing B2, final Human scan and publication requirements under D51.
+
+- Write set is project version in pyproject.toml, root project version in uv.lock, the 0.3.0 CHANGELOG section, and Chinese docs/acceptance/release-0.3.0.md. Preserve all locked dependencies and settings. Record product/runtime input identity to transfer M7's verified test evidence across metadata-only changes.
+- R3.1–R3.3: report exact M0–M7 regression inputs, diff rules, bidirectional DESIGN drift/public API, user docs, privacy differences and whole-tree/history prescan. Write detailed findings only when necessary and keep existing identity markers in ignored state. Physical audio outcomes remain unverified unless observed.
+- R3.4 and R3.6: under the lock, run the same already existing three benchmark scripts once each against the exact M7 runtime and short real Chromium temporary directory. Record the seven three-sample medians and compare with C2. Reuse built exact production assets, build the wheel and smoke actual installation in an isolated clean venv using warm locked deps and platform torch. Verify installed 0.3.0, static frontend response, bundled preset and token enforcement, then stop the owned server.
+- R3.5 and R3.7: acceptance contains milestone recap, identified deviations, artifact identity and publication status. Retain wheel/logs in ignored state. Independently approved candidate is integrated and Controller records commit and metrics on master. Tag, release page and package-index publication remain separate from source delivery.

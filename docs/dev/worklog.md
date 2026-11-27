@@ -4,6 +4,17 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 本文件进 git：Human 的原话以 H<n> 引用（原文在状态目录的 `human-inputs.md`），不写个人信息与机器信息（本机相关的内容写在状态目录的 `local.md`）。run 开始之前的设计与接入记录在本机状态目录的 `history/`，不在本仓库。
 
+## 2026-11-27 (M7 delivery and C3 candidate)
+
+M7 was integrated at master commit `befb2cc9fefefd1ed27b66ba460da387a596d4ae` and pushed; the final audited tree matches the tested phase tree `750ff9968728c2db193b78434a8e5882973c5a40`.
+The integrated run passed 279 pytest tests with 46 CUDA/MPS skips, 37 Vitest tests, one H48 Chromium case and 78 prior Chromium cases, plus lint, typecheck and both builds.
+H48 measured the signed arrivals and verified a 7.500 ms later-arrival difference without changing the EDC, C50 or T20 results; the screenshot is retained at `frontend/test-results/screens/M7-rir.png`.
+The simulated ESS measurement produced −50.47 dB reconstruction error and zero loopback delay error, while overflow invalidation preserved raw WAV data and published no lane.
+The phase rule check returned `0 FAIL, 4 REVIEW`, with all four authenticated request-boundary findings accepted under V1#1; the initial check was mistakenly run from the master checkout and its `0 FAIL, 0 REVIEW` output was discarded.
+The seven §17 medians and C2 comparison are recorded in `docs/dev/performance.md`; all benchmark commands exited zero, and the wrapper's final Chromium-cache directory cleanup was completed manually without repeating measurements.
+M7.5 real loudspeaker and microphone measurement remains unverified, with its procedure recorded in `docs/manual-checks.md`.
+The reviewed C3 0.3.0 local-candidate plan and its Plan Review are now recorded under `docs/dev/cycles/C3/`.
+
 ## 2026-11-26 (M7 resumption)
 
 The corrected RIR analysis and measurement and the browser implementation passed independent review and were committed as 37be2ae, abb69eb and bcc31fa.
