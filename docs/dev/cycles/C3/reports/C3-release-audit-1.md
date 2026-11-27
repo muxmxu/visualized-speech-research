@@ -1,0 +1,14 @@
+# C3 release mechanical audit 1
+
+**FAIL for staged candidate tree `8bfd41e3b6cfc5a556f8dd6222ac895608ec5f79`** on base `c114597029b78c9325fd4f2c76a4784c23a81ce3`.
+
+- In `docs/acceptance/release-0.3.0.md`, the R3.6 row and installation paragraph report exit 0 for service cleanup. `command-exits.tsv` records exit 0 for eight commands including the installed smoke, and `installed-smoke.log` records the service child returning `-15` after SIGTERM. The runner removes the temporary directory with an EXIT trap and records no separate cleanup exit. The temporary directory is absent.
+- The §17 paragraph says each benchmark script was run three times. The retained `M7-bench` ledger records one invocation of each of three scripts, each with exit 0, and the logs contain three observations per metric.
+
+The remaining mechanical checks passed against the candidate plan and Plan Review.
+
+- The index matches all 349 paths, blob IDs and modes in the frozen tree, and the retained patch matches its staged base diff. The four changed paths are `pyproject.toml`, `uv.lock`, `CHANGELOG.md` and `docs/acceptance/release-0.3.0.md`. The only manifest and lock changes are the root version lines from 0.2.0 to 0.3.0. The staged whitespace check passed and `rules-final.log` records `0 FAIL, 0 REVIEW`. The privacy prescan recorded no candidate-file or added-line matches and found the existing author and committer metadata patterns in the 93 reachable base commits, with 186 matches per pattern.
+- The candidate preserves the M7 runtime and test blobs and modes, and the three production UI digests match the accepted M7 build. The retained M7 evidence records 279 pytest passes with 46 platform skips, 37 Vitest passes and 79 Chromium passes. The RIR results retain T30 error below 5%, C50 error below 0.2 dB, D50 absolute error below 0.01, ESS relative IR error of −50.47 dB, zero loopback sample error and overflow invalidation. M7.5 is unverified on physical hardware.
+- The 739,938-byte wheel has SHA-256 `cbea11727915a9143ac41accf7141d9a120b799d70db2ac10fc2a9907ab904f2`. Its 45 entries passed CRC validation, including 38 exact package files, the bundled skill and presets, and three production web assets with exact digests. Wheel metadata reports 0.3.0 and the `vsr` entry point. The isolated Python 3.12.14 install used CPU Torch 2.15.0+cpu and locked dependencies, and the dependency check found all 55 packages compatible. The smoke confirms installed imports, session responses 401 and 200, static responses 200 with exact asset bytes, and the 48 kHz `analysis` preset.
+- Recomputed §17 medians are 4.330 s, 3.2854 s, 64.9 ms, 6.9 ms, 561.5 ms, 41.768 fps and 143.419 ms. The values and C2 deltas match the acceptance report and the performance ledger.
+- R3.7 is explicitly pending B2 and the final Human publication scan. Package-index publication requires separate authorization. The local `v0.3.0` tag is absent.

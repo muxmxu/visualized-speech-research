@@ -4,6 +4,21 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 本文件进 git：Human 的原话以 H<n> 引用（原文在状态目录的 `human-inputs.md`），不写个人信息与机器信息（本机相关的内容写在状态目录的 `local.md`）。run 开始之前的设计与接入记录在本机状态目录的 `history/`，不在本仓库。
 
+## 2026-11-27 (C3 local 0.3.0 candidate)
+
+M7 was delivered and pushed at `befb2cc9fefefd1ed27b66ba460da387a596d4ae`, and the release candidate was prepared from records commit `c114597029b78c9325fd4f2c76a4784c23a81ce3`.
+The exact accepted candidate tree is `c6bf7b09c24ecbd5383ec7c2294e212031d097a2`, containing only `CHANGELOG.md`, `docs/acceptance/release-0.3.0.md`, `pyproject.toml` and `uv.lock`.
+The first independent audit and semantic review identified three factual report wording errors, which were corrected on the sole amended candidate tree.
+Independent mechanical audit 2 and semantic review 2 passed against the same frozen tree without rerunning tests, benchmarks, build or installation.
+The D38 independent top-level transaction created the release phase and master commit `60bef61ba7ec89297aff2b33f4d96471d9d2a0d5` with the exact accepted tree and sole parent `c114597029b78c9325fd4f2c76a4784c23a81ce3`.
+The candidate commit was pushed to `origin/master`, and the remote branch was verified at `60bef61ba7ec89297aff2b33f4d96471d9d2a0d5`.
+The installed wheel is 739938 bytes with SHA-256 `cbea11727915a9143ac41accf7141d9a120b799d70db2ac10fc2a9907ab904f2`.
+All eight final build and install smoke commands exited zero, the environment check found 55 compatible packages, and the installed authenticated session, static resources, preset and RIR DSP import passed.
+M0–M7 regression inputs and the seven performance medians are identical to their accepted M7 evidence, so those checks and benchmarks were reused.
+The report records M4 physical input and loopback checks and M7.5 speaker and microphone measurement as unverified.
+Candidate file privacy, whitespace and rule checks passed, while the 93-commit history scan retained the previously known account and email metadata findings for the separate Human publication review.
+The formal `v0.3.0` tag, public release page and package-index publication were not created under D51 and B2.
+
 ## 2026-11-27 (M7 delivery and C3 candidate)
 
 M7 was integrated at master commit `befb2cc9fefefd1ed27b66ba460da387a596d4ae` and pushed; the final audited tree matches the tested phase tree `750ff9968728c2db193b78434a8e5882973c5a40`.

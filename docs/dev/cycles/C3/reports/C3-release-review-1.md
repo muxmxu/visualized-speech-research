@@ -1,0 +1,10 @@
+# C3 release candidate independent semantic review 1
+
+**FAIL for staged candidate tree `8bfd41e3b6cfc5a556f8dd6222ac895608ec5f79`.**
+
+- `docs/acceptance/release-0.3.0.md:12` and `:34` overstate the retained install smoke. `production-assets.sha256` and `installed-smoke.log` record HTTP 200 and matching hashes for three files in total, the home page, one JavaScript file and one CSS file. The smoke command exited 0, the server exited on SIGTERM with status `-15`, and the temporary runtime directory was removed. `command-exits.tsv` has eight zero command exits and no separate cleanup exit.
+- `docs/acceptance/release-0.3.0.md:50` reports three invocations per benchmark script. The accepted `phase-release.md` and M7 evidence record one invocation per script, with three samples per metric. The seven medians and C2 deltas match the M7 acceptance and performance ledger.
+- The four-file staged delta preserves the accepted M7 runtime and regression inputs. The M0–M7 feature recap and changelog agree with linked acceptances. DESIGN §§14 and 19, D55–D56 and the M7 review support signed sample readouts, arrival markers independent of EDC and metrics, the RIR metric set and software-injected ESS. The ESS fixture recovered the response at −50.47 dB relative error with zero loopback sample error. Injected overflow retained a readable raw WAV and published no lane. M7.5 remains physically unverified. The linked M4.6 report also keeps its three hardware outcomes unverified.
+- The retained wheel matches the reported SHA-256. Installed 0.3.0, CPU Torch, 55 compatible packages, preset resolution and session authorization statuses 401 and 200 agree with the logs. The candidate privacy scan summary and historical author and committer metadata findings agree with `privacy-final.log`. R3.7 explicitly defers the formal tag and public release pending B2 and the final Human review, with separate authorization for package-index upload.
+
+This review used retained evidence without rerunning tests, benchmarks, the build or installation.
