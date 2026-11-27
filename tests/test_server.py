@@ -105,6 +105,28 @@ def test_unexpected_handler_error_returns_traceback(tmp_path, monkeypatch):
     assert f"FileNotFoundError: {payload['detail']}" in payload["traceback"]
 
 
+def test_file_listing_omits_dangling_symlink(tmp_path, monkeypatch):
+    monkeypatch.setenv("VSR_HOME", str(tmp_path / "state"))
+    directory = tmp_path / "audio"
+    (directory / "sub").mkdir(parents=True)
+    sf.write(directory / "valid.wav", np.zeros(8, dtype=np.float32), 8000)
+    (directory / "broken.wav").symlink_to(directory / "missing.wav")
+    with TestClient(create_app("secret", "cpu"), raise_server_exceptions=False) as client:
+        response = client.get(
+            "/api/fs/list",
+            params={"path": str(directory)},
+            headers={"Authorization": "Bearer secret"},
+        )
+
+    assert response.status_code == 200, response.text
+    entries = response.json()["entries"]
+    assert [(entry["name"], entry["is_dir"]) for entry in entries] == [
+        ("sub", True),
+        ("valid.wav", False),
+    ]
+    assert entries[1]["size"] == (directory / "valid.wav").stat().st_size
+
+
 @pytest.mark.parametrize("field", ["offset", "gain_db"])
 @pytest.mark.parametrize("value", ["1e400", "-1e400"])
 def test_nonfinite_lane_values_rejected_without_mutation(tmp_path, monkeypatch, field, value):

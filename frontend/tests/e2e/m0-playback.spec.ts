@@ -100,7 +100,9 @@ test('a failed queued PCM request stops playback and permits single-click recove
   releaseFailure();
   await expect(page.getByText('Queued PCM failure')).toHaveCount(1);
   await expect(page.getByText('Queued PCM failure')).toBeVisible();
-  await expect(page.getByText('Request failed')).toHaveCount(0);
+  // Non-retrying count after the request has settled; a retrying count would pass once a duplicate notification auto-closes.
+  await page.waitForTimeout(500);
+  expect(await page.locator('.mantine-Notification-root').allInnerTexts()).toHaveLength(1);
   await expect.poll(() => page.evaluate(() => window.__vsr_test.playing())).toBe(false);
   await expect(play).toHaveText('Play');
   await expect.poll(() => page.evaluate(() => window.__vsr_test.rms())).toBeLessThan(0.001);

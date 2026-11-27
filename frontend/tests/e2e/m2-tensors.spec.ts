@@ -1,4 +1,5 @@
 import { execFile } from 'node:child_process';
+import { realpathSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { mkdir } from 'node:fs/promises';
 import { promisify } from 'node:util';
@@ -74,7 +75,7 @@ test('opens Files with a keyboard, confirms an opaque tensor leaf and remembers 
   await dialog.getByLabel('Maximum frequency (Hz)').fill('6000');
   const confirmation = page.waitForRequest(request => new URL(request.url()).pathname === '/api/open_tensor');
   await dialog.getByLabel('Maximum frequency (Hz)').press('Enter');
-  expect((await confirmation).postDataJSON()).toEqual({ path: file,
+  expect((await confirmation).postDataJSON()).toEqual({ path: realpathSync(file),
     key_path: [[{ bytes: '61' }, { int: '2305843009213693952' }]],
     interpretation: { kind: 'feature', axes: '[T,F]', sr: 16000, hop: 1600, freq_axis: { type: 'linear', f_max: 6000 }, value_scale: 'db' },
   });
