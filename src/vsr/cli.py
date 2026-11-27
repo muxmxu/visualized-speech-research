@@ -96,9 +96,9 @@ def serve(
     url = f"http://127.0.0.1:{5173 if dev else actual_port}/?token={token}"
     try:
         app = create_app(token, device, paths, launch_id=launch_id)
-        if dev:
+        if dev or no_browser:
             print(url, flush=True)
-        elif not no_browser:
+        else:
             open_browser(url, launch_id)
         uvicorn.run(app, host=host, port=actual_port, fd=listener.fileno())
     finally:

@@ -1,0 +1,12 @@
+services:
+  vsr:
+    build: .
+    ports:
+      - "127.0.0.1:8765:8765"
+    environment:
+      VSR_HOME: /var/lib/vsr
+    volumes:
+      - vsr-data:/var/lib/vsr
+
+volumes:
+  vsr-data:

@@ -1,0 +1,13 @@
+.git
+.venv
+agent_workspace/
+frontend/node_modules/
+frontend/test-results/
+frontend/playwright-report/
+src/vsr/web/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+/package.json
+/package-lock.json
