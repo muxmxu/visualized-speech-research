@@ -39,7 +39,8 @@ import type { Viewport } from './state/viewport';
 import { Playback } from './audio/playback';
 import { exposePlayback, exposeSpectra } from './audio/testHook';
 
-function report(error: unknown) { notifications.show({ title: 'Request failed', message: String(error), color: 'red' }); }
+// request() has already shown the notification for an ApiError.
+function report(error: unknown) { if (!(error instanceof ApiError)) notifications.show({ title: 'Request failed', message: String(error), color: 'red' }); }
 function run(action: Promise<unknown>) { void action.catch(report); }
 
 const idleRecording: RecordState = { type: 'record_state', state: 'idle', mapping: [], start_time: null, notice: null };
@@ -578,7 +579,7 @@ export default function App() {
     if (operation.current) return;
     operation.current = true; setWorking(true);
     const timer = window.setTimeout(() => setBusy(true), 300);
-    void action().catch((error: unknown) => { if (!(error instanceof ApiError)) report(error); }).finally(() => {
+    void action().catch(report).finally(() => {
       window.clearTimeout(timer); operation.current = false; setWorking(false); setBusy(false);
     });
   };
