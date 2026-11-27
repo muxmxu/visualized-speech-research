@@ -326,7 +326,10 @@ def create_app(
         directory = Path(path).expanduser().resolve()
         items = []
         for item in sorted(directory.iterdir()):
-            if item.is_dir() or item.suffix.lower() in AUDIO_EXTENSIONS | TENSOR_EXTENSIONS:
+            # is_dir/is_file are False for a dangling symlink, which stat() would fail on.
+            if item.is_dir() or (
+                item.is_file() and item.suffix.lower() in AUDIO_EXTENSIONS | TENSOR_EXTENSIONS
+            ):
                 stat = item.stat()
                 items.append(
                     {

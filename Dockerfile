@@ -29,6 +29,9 @@ RUN uv sync --frozen --no-dev --extra plot --extra safetensors \
     && useradd --system --uid 10001 --create-home vsr \
     && install -d --owner=vsr --group=vsr /var/lib/vsr
 
+# numba otherwise JIT-compiles for the host CPU name, which raises SIGILL in Linux VMs on Apple M4.
+ENV NUMBA_CPU_NAME=generic
+
 USER vsr
 
 EXPOSE 8765

@@ -10,7 +10,6 @@ from dataclasses import dataclass
 from decimal import Decimal
 from math import floor, isfinite, log2, log10
 from pathlib import Path
-from tempfile import NamedTemporaryFile
 from threading import Event
 
 import numpy as np
@@ -21,7 +20,7 @@ from vsr.analyzers.registry import Analyzer
 from vsr.api import Scalars, _dataset_cpu_scope
 from vsr.dataset import store
 from vsr.dsp.spectrum import NoEligibleFrames, active_frames, welch
-from vsr.io.audio import AUDIO_EXTENSIONS
+from vsr.io.audio import AUDIO_EXTENSIONS, atomic_path
 from vsr.presets import resolve_preset
 
 logger = logging.getLogger(__name__)
@@ -427,13 +426,5 @@ def write_csv(document, dataset: Dataset):
 
 def write_atomic(path: Path, write: Callable, *, binary: bool = False):
     mode, options = ("wb", {}) if binary else ("w", {"encoding": "utf-8", "newline": ""})
-    with NamedTemporaryFile(
-        mode, dir=path.parent, prefix=f".{path.name}.", delete=False, **options
-    ) as handle:
-        temporary = Path(handle.name)
-        try:
-            write(handle)
-            handle.close()
-            os.replace(temporary, path)
-        finally:
-            temporary.unlink(missing_ok=True)
+    with atomic_path(path) as temporary, open(temporary, mode, **options) as handle:
+        write(handle)
