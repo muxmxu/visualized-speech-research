@@ -1,5 +1,7 @@
-import type { Page } from '@playwright/test';
+import type { Page, WebSocketRoute } from '@playwright/test';
 import { test, expect } from './fixtures';
+
+const panelTitles = ['Lanes', 'Files', 'Properties', 'Settings', 'Display', 'Dataset', 'Analyzers', 'Frequency Analysis', 'Record', 'RIR'];
 
 function notices(page: Page) {
   return page.locator('.mantine-Notification-root');
@@ -11,6 +13,13 @@ async function settledNotices(page: Page) {
   return notices(page).allInnerTexts();
 }
 
+async function expectWorkspace(page: Page) {
+  await expect(page.locator('#root .dock')).toBeAttached();
+  await expect(page.locator('.lanes')).toBeVisible();
+  const titles = await page.locator('.dv-tab .dv-default-tab-content').allTextContents();
+  expect([...titles].sort()).toEqual([...panelTitles].sort());
+}
+
 async function openTone(page: Page, server: { url: string; token: string; audio: string }) {
   await page.goto(`${server.url}/?token=${server.token}`);
   await expect(page.getByLabel('Directory')).not.toHaveValue('~');
@@ -19,6 +28,32 @@ async function openTone(page: Page, server: { url: string; token: string; audio:
   await page.getByRole('button', { name: '♪ tone.wav' }).dblclick();
   await expect(page.getByLabel('Waveform tone.wav')).toBeVisible();
 }
+
+test('refreshes the session when the WebSocket opens after a lane change was broadcast', async ({ page, server }) => {
+  let connect: () => void = () => undefined;
+  const opened = new Promise<void>(resolve => { connect = resolve; });
+  await page.routeWebSocket('**/ws?*', async route => { await opened; route.connectToServer(); });
+  const session = page.waitForResponse(response => new URL(response.url()).pathname === '/api/session');
+  await page.goto(`${server.url}/?token=${server.token}`);
+  expect(await (await session).json()).toEqual({ lanes: [] });
+  const result = await page.request.post(`${server.url}/api/open`, { headers: { Authorization: `Bearer ${server.token}` }, data: { paths: [server.audio] } });
+  expect(result.ok()).toBe(true);
+  connect();
+  await expect(page.getByLabel('Waveform tone.wav')).toBeVisible();
+});
+
+test('shows a lasting notification when the WebSocket closes', async ({ page, server }) => {
+  const socket = {} as { route: WebSocketRoute };
+  await page.routeWebSocket('**/ws?*', route => { socket.route = route; route.connectToServer(); });
+  await page.goto(`${server.url}/?token=${server.token}`);
+  await expectWorkspace(page);
+  await expect.poll(() => socket.route).toBeDefined();
+  expect(await settledNotices(page)).toEqual([]);
+  await socket.route.close();
+  await expect(notices(page).filter({ hasText: 'Connection to the vsr server was lost' })).toHaveCount(1);
+  await page.waitForTimeout(5000);
+  expect(await settledNotices(page)).toHaveLength(1);
+});
 
 test('hiding the Lanes panel requests no zero-width waveform', async ({ page, server }) => {
   await openTone(page, server);

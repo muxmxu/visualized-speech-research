@@ -439,6 +439,11 @@ export default function App() {
     }));
     const socket = new WebSocket(`${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/ws?token=${encodeURIComponent(token)}`);
     socket.binaryType = 'arraybuffer';
+    // Lane changes broadcast before the socket registered are not replayed.
+    socket.onopen = () => run(refresh());
+    socket.onclose = () => notifications.show({
+      title: 'Connection to the vsr server was lost', message: 'Reload the page to reconnect.', color: 'red', autoClose: false,
+    });
     socket.onmessage = event => {
       const data: unknown = event.data;
       if (data instanceof ArrayBuffer) {
@@ -475,7 +480,7 @@ export default function App() {
           break;
       }
     };
-    return () => socket.close();
+    return () => { socket.onclose = null; socket.close(); };
   }, [refresh, browse, queueTensors, acceptRecordState, refreshAnalyzers]);
   useEffect(() => {
     const element = host.current; if (!element) return;
