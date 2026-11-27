@@ -89,9 +89,11 @@ function WaveCanvas({ lane, view, channel }: { lane: Lane; view: Viewport; chann
       drawWaveform(ctx, data.arrays, data.header, next, currentSize.width, currentSize.height, currentLane.sr, currentLane.offset);
     };
     const scheduler = waveformUpdates(draw, next => {
+      const { lane: currentLane, size: currentSize } = current.current;
+      // A hidden panel has zero width; its viewport is empty until the panel is shown again.
+      if (currentSize.width === 0) return;
       controller.current?.abort();
       const active = new AbortController(); controller.current = active;
-      const { lane: currentLane, size: currentSize } = current.current;
       const width = Math.max(1, Math.round(currentSize.width * 1.5));
       const t0 = next.t0 - currentSize.width * next.secondsPerPx * 0.25;
       const t1 = next.t0 + currentSize.width * next.secondsPerPx * 1.25;
@@ -217,6 +219,7 @@ function OverviewWave({ lane, start, end }: { lane: Lane; start: number; end: nu
     const canvas = ref.current; if (!canvas) return;
     const controller = new AbortController();
     const observer = new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width === 0) return;
       const width = Math.max(1, Math.round(entry.contentRect.width));
       void request(`/lanes/${lane.id}/waveform?${new URLSearchParams({ t0: String(start), t1: String(end), width: String(width) })}`, { signal: controller.signal }).then(r => r.arrayBuffer()).then(buffer => {
         const { arrays, header } = decodeFrame(buffer); const dpr = window.devicePixelRatio;
