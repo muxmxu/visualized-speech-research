@@ -496,20 +496,30 @@ export default function App() {
     const element = host.current; if (!element) return;
     const dock = new DockviewComponent(element, { theme: themeDark, createComponent: options => { const panel = document.createElement('div'); panel.style.height = '100%'; return { element: panel, init: () => { setTargets(old => ({ ...old, [options.name]: panel })); } }; } });
     dockRef.current = dock;
+    const sideWidth = Math.max(120, Math.min(240, Math.round(element.clientWidth * 0.18)));
     const saved = localStorage.getItem('vsr-layout');
-    if (saved) {
-      dock.fromJSON(JSON.parse(saved) as SerializedDockview);
-      if (!dock.api.getPanel('display')) {
-        const inspector = dock.api.getPanel('properties') ?? dock.api.getPanel('settings');
-        const previous = inspector?.group.activePanel;
-        dock.addPanel({ id: 'display', component: 'display', title: 'Display', position: inspector ? { referencePanel: inspector.id, direction: 'within' } : { referencePanel: 'lanes', direction: 'right' } });
-        previous?.api.setActive(); localStorage.setItem('vsr-layout', JSON.stringify(dock.toJSON()));
+    let restored = false;
+    // Browser storage is a trust boundary: a layout that does not parse or that dockview rejects is replaced by the default.
+    if (saved) try { dock.fromJSON(JSON.parse(saved) as SerializedDockview); restored = true; } catch (error) {
+      notifications.show({ title: 'Saved layout was reset', message: String(error), color: 'yellow' });
+    }
+    if (restored) {
+      // Re-add panels the user closed, each next to a panel that exists at that point.
+      if (!dock.api.getPanel('lanes')) {
+        const analysis = dock.api.getPanel('frequency-analysis');
+        dock.addPanel({ id: 'lanes', component: 'lanes', title: 'Lanes', position: analysis ? { referencePanel: analysis.id, direction: 'above' } : { direction: 'left' } });
+      }
+      if (!dock.api.getPanel('files')) dock.addPanel({ id: 'files', component: 'files', title: 'Files', position: { referencePanel: 'lanes', direction: 'left' }, initialWidth: sideWidth });
+      for (const [id, title] of [['properties', 'Properties'], ['settings', 'Settings'], ['display', 'Display']]) {
+        if (dock.api.getPanel(id)) continue;
+        const inspector = ['properties', 'settings', 'display', 'analyzers'].find(other => dock.api.getPanel(other));
+        dock.addPanel({ id, component: id, title, inactive: true, ...(inspector ? { position: { referencePanel: inspector, direction: 'within' } } : { position: { referencePanel: 'lanes', direction: 'right' }, initialWidth: sideWidth }) });
       }
     }
     else {
       dock.addPanel({ id: 'lanes', component: 'lanes', title: 'Lanes' });
-      dock.addPanel({ id: 'files', component: 'files', title: 'Files', position: { referencePanel: 'lanes', direction: 'left' }, initialWidth: Math.max(120, Math.min(240, Math.round(element.clientWidth * 0.18))) });
-      dock.addPanel({ id: 'properties', component: 'properties', title: 'Properties', position: { referencePanel: 'lanes', direction: 'right' }, initialWidth: Math.max(120, Math.min(240, Math.round(element.clientWidth * 0.18))) });
+      dock.addPanel({ id: 'files', component: 'files', title: 'Files', position: { referencePanel: 'lanes', direction: 'left' }, initialWidth: sideWidth });
+      dock.addPanel({ id: 'properties', component: 'properties', title: 'Properties', position: { referencePanel: 'lanes', direction: 'right' }, initialWidth: sideWidth });
       dock.addPanel({ id: 'settings', component: 'settings', title: 'Settings', position: { referencePanel: 'properties', direction: 'within' } });
       dock.addPanel({ id: 'display', component: 'display', title: 'Display', position: { referencePanel: 'properties', direction: 'within' } });
     }

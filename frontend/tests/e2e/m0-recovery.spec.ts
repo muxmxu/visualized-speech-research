@@ -29,6 +29,33 @@ async function openTone(page: Page, server: { url: string; token: string; audio:
   await expect(page.getByLabel('Waveform tone.wav')).toBeVisible();
 }
 
+test('restores every panel when the saved layout lacks Lanes and Dataset', async ({ page, server }) => {
+  await page.goto(`${server.url}/?token=${server.token}`);
+  await expectWorkspace(page);
+  for (const title of ['Dataset', 'Lanes']) {
+    const tab = page.locator('.dv-tab').filter({ has: page.getByText(title, { exact: true }) });
+    await tab.click();
+    await tab.locator('.dv-default-tab-action').click();
+    await expect(tab).toHaveCount(0);
+  }
+  const layout = await page.evaluate(() => localStorage.getItem('vsr-layout'));
+  expect(layout).not.toContain('"lanes"');
+  await page.addInitScript(value => localStorage.setItem('vsr-layout', value), layout as string);
+  await page.reload();
+  await expectWorkspace(page);
+  expect(await settledNotices(page)).toEqual([]);
+});
+
+for (const saved of ['{}', 'not json']) {
+  test(`resets a saved layout ${JSON.stringify(saved)} to the default with one notification`, async ({ page, server }) => {
+    await page.addInitScript(value => localStorage.setItem('vsr-layout', value), saved);
+    await page.goto(`${server.url}/?token=${server.token}`);
+    await expectWorkspace(page);
+    await expect(notices(page).filter({ hasText: 'Saved layout was reset' })).toHaveCount(1);
+    expect(await settledNotices(page)).toHaveLength(1);
+  });
+}
+
 for (const saved of ['null', '{}', '[{"path":"/a.wav"}]', '["/a.wav",1]', 'not json']) {
   test(`treats a stored recent list ${saved} that is not an array of strings as empty`, async ({ page, server }) => {
     await page.addInitScript(value => localStorage.setItem('vsr-recent', value), saved);
