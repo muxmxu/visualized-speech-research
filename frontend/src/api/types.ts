@@ -6,6 +6,7 @@ interface LaneMetadata {
 export interface Lane extends LaneMetadata {
   kind: 'audio'; sr: number; channels: number; samples: number; dirty: boolean;
   record_warnings: RecordingWarning[];
+  rir_time_zero_calibrated?: boolean;
 }
 
 export type MelSettings = { n_mels: number; fmin: number; fmax: number; htk: boolean };
@@ -119,4 +120,36 @@ export interface DatasetRow { index: number; cells: Record<string, DatasetCell> 
 export interface DatasetLtas {
   frequencies: Float32Array; groups: string[]; unit: 'db_per_hz';
   mean: Float32Array; p10: Float32Array; p90: Float32Array;
+}
+
+export type RirFit = 'EDT' | 'T20' | 'T30';
+export type RirMetric = RirFit | 'C50' | 'C80' | 'D50' | 'DRR';
+export interface RirAnalysisRequest {
+  lane: string; channel: number; bands: number[] | null; use_lundeby: boolean; truncation_s?: number;
+}
+export type RirBandMetrics = Record<RirMetric, number | null> & {
+  r2: Record<RirFit, number | null>;
+  noise_floor_db: number | null;
+  crosspoint_s: number | null;
+  reasons: Partial<Record<RirMetric | 'PNR' | 'onset_s' | 'noise_floor_db', string>>;
+};
+export interface RirDecay {
+  times_s: number[]; envelope_db: (number | null)[]; edc_db: (number | null)[];
+  fits: Record<RirFit, [[number, number], [number, number]] | null>;
+}
+export interface RirAnalysisResult {
+  bands: Record<string, RirBandMetrics> & { broadband: RirBandMetrics & { onset_s: number | null; PNR: number | null } };
+  curves: Record<string, RirDecay>;
+}
+export interface RirSweep {
+  output_device: number | null; output_channel: number; sr: number; f1_hz: number; f2_hz?: number;
+}
+export interface RirMeasureRequest extends RirSweep {
+  input_device: number | null; input_channels: number[]; loopback_channel: number | null;
+  duration_s: number; amplitude_dbfs: number; fade_in_s: number; fade_out_s: number;
+  pre_silence_s: number; tail_silence_s: number; repeats: number; ir_length_s: number; confirm_loud: boolean;
+}
+export interface RirMeasureResult {
+  valid: boolean; reason: string | null; lanes: Lane[]; raw_paths: string[];
+  ir_path: string | null; metadata_path: string; time_zero_calibrated: boolean; loopback_delay_samples: number | null;
 }

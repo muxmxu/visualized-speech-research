@@ -300,3 +300,43 @@ header .tf-measurements { flex-wrap:wrap; min-width:0; max-width:100%; }
 .dataset-chart-legend { display:flex; flex-wrap:wrap; gap:5px 12px; max-height:70px; overflow:auto; padding:0 8px; margin:0; list-style:none; }
 .dataset-chart-legend li { display:flex; align-items:center; gap:5px; min-width:0; overflow-wrap:anywhere; }
 .dataset-chart-legend i { display:inline-block; flex:none; width:13px; height:3px; }
+
+.rir-panel { display:flex; flex-direction:column; align-items:stretch; gap:8px; }
+.rir-controls, .rir-band-controls, .rir-arrival-tools { display:flex; align-items:center; flex-wrap:wrap; gap:8px; }
+.rir-controls > strong { max-width:35%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rir-controls label, .rir-band-controls label { display:inline-flex; align-items:center; gap:3px; }
+.rir-band-controls { gap:4px 8px; }
+.rir-band-controls input, .rir-controls input { height:auto; margin:0; }
+.rir-card { flex:none; min-width:0; padding:8px; background:var(--panel); border:1px solid var(--border); border-radius:4px; }
+.rir-card h3 { margin:0; font-size:12px; }
+.rir-card-heading { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; }
+.rir-db-plot .u-legend { font-size:10px; text-align:left; white-space:normal; }
+.rir-cutoff { position:absolute; top:0; bottom:0; z-index:1; width:12px; height:auto; transform:translateX(-50%); border:0; background:transparent; cursor:ew-resize; touch-action:none; }
+.rir-cutoff::before { content:''; position:absolute; inset:0 calc(50% - 1px); background:var(--playhead); }
+.rir-cutoff::after { content:''; position:absolute; top:0; left:2px; width:8px; height:8px; border-radius:0 0 50% 50%; background:var(--playhead); }
+.rir-axis-grid { display:grid; grid-template-columns:44px minmax(0, 1fr); margin-top:6px; }
+.rir-coefficient-axis { display:flex; flex-direction:column; justify-content:space-between; padding:1px 6px 1px 0; text-align:right; color:var(--text-dim); }
+.rir-arrival-plot { position:relative; height:120px; overflow:hidden; border:1px solid var(--border); background:#171d1b; cursor:crosshair; }
+.rir-arrival-plot canvas, .rir-marker { position:absolute; inset:0; pointer-events:none; }
+.rir-marker { right:auto; width:1px; background:var(--wave-rms); color:var(--wave-rms); }
+.rir-marker.direct { background:var(--accent); color:var(--accent); }
+.rir-marker span { position:absolute; top:2px; left:2px; padding:1px 3px; background:var(--bg); white-space:nowrap; font-size:10px; }
+.rir-marker.align-end span { left:auto; right:2px; }
+.rir-delay-axis { grid-column:2; display:flex; justify-content:space-between; margin-top:3px; color:var(--text-dim); }
+.rir-arrival-caption { display:flex; justify-content:space-between; margin-top:3px; color:var(--text-dim); }
+.rir-arrival-tools button[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); }
+.rir-inline-status { display:flex; align-items:center; gap:5px; margin:4px 0; color:var(--text-dim); }
+.rir-table-wrap { overflow:auto; }
+.rir-table { width:100%; margin-top:6px; border-collapse:collapse; text-align:right; }
+.rir-table :is(td, th) { border-top:1px solid var(--border); padding:4px 6px; vertical-align:top; }
+.rir-table th:first-child { text-align:left; }
+.rir-table thead { color:var(--text-dim); }
+.rir-table small { display:block; color:var(--text-dim); }
+.rir-measure > summary { cursor:pointer; font-weight:bold; }
+.rir-measure form { display:block; margin-top:6px; }
+.rir-measure fieldset { min-width:0; border:1px solid var(--border); }
+.rir-measure-fields { display:grid; grid-template-columns:repeat(auto-fit, minmax(160px, 1fr)); gap:6px; }
+.rir-measure-fields label { display:grid; gap:3px; }
+.rir-measure-fields label > :is(input, select) { width:100%; }
+.rir-measure fieldset > :is(.rir-controls, .rir-band-controls) { margin-top:8px; }
+.rir-measure-result { display:grid; gap:3px; margin-top:8px; overflow-wrap:anywhere; }

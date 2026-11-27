@@ -251,6 +251,27 @@ def spectrum(ax, signals: dict, sr, preset="ltas", stats=("mean", "p10", "p90"))
     return _record_spec(ax.figure, plot_params)
 
 
+def rir(ax, h, sr, bands=None) -> dict:
+    """Draw room impulse response decay curves and return the underlying analysis."""
+    result = dsp.rir_metrics(h, sr, bands=bands)
+    broadband = result["curves"]["broadband"]
+    time_scale, time_label = _time_axis(result["bands"]["broadband"]["crosspoint_s"])
+    for name, curve in result["curves"].items():
+        times = np.asarray(curve["times_s"]) * time_scale
+        levels = np.asarray(curve["edc_db"], dtype=np.float64)
+        label = "Broadband" if name == "broadband" else f"{name} Hz"
+        ax.plot(times, levels, label=label, linewidth=2 if name == "broadband" else 1)
+    for name, fit in broadband["fits"].items():
+        if fit is not None:
+            times, levels = np.asarray(fit).T
+            ax.plot(times * time_scale, levels, linestyle="--", label=name)
+    ax.set_xlabel(time_label)
+    ax.set_ylabel("Energy decay (dB)")
+    ax.legend()
+    _record_spec(ax.figure, {"object": "rir", "sr": sr})
+    return result
+
+
 def savefig(fig, path, **kw) -> None:
     """Write Figure metadata with the output format's supported key."""
     output_format = kw.get("format")

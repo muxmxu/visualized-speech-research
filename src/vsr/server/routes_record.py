@@ -95,40 +95,44 @@ class ActiveTake:
     notice: str | None
 
 
-def validated_devices(body, *, duplex: bool = False, calibration: bool = False):
+def available_devices():
     sd, reason = load_sounddevice()
     if sd is None:
         raise HTTPException(409, reason)
-    options = describe_devices(sd, reason)
+    return sd, describe_devices(sd, reason)
 
-    def select(direction):
-        requested = getattr(body, f"{direction}_device")
-        device_id = options[f"default_{direction}"] if requested is None else requested
-        devices = options["devices"]
-        if device_id is None or device_id >= len(devices):
-            raise HTTPException(422, f"No valid {direction} device selected")
-        channels = devices[device_id][f"max_{direction}_channels"]
-        if channels == 0:
-            raise HTTPException(422, f"The selected device has no {direction} channels")
-        return device_id, channels
 
-    input_id, input_channels = select("input")
+def select_device(options, direction, requested):
+    device_id = options[f"default_{direction}"] if requested is None else requested
+    devices = options["devices"]
+    if device_id is None or device_id >= len(devices):
+        raise HTTPException(422, f"No valid {direction} device selected")
+    channels = devices[device_id][f"max_{direction}_channels"]
+    if channels == 0:
+        raise HTTPException(422, f"The selected device has no {direction} channels")
+    return device_id, channels
+
+
+def check_device_settings(sd, direction, device_id, channels, sr):
+    check = sd.check_input_settings if direction == "input" else sd.check_output_settings
+    try:
+        check(device=device_id, channels=channels, samplerate=sr, dtype="float32")
+    except sd.PortAudioError as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+def validated_devices(body, *, duplex: bool = False, calibration: bool = False):
+    sd, options = available_devices()
+    input_id, input_channels = select_device(options, "input", body.input_device)
     if calibration:
         input_channels = 1
     output = None
     if duplex:
-        output_id, capacity = select("output")
+        output_id, capacity = select_device(options, "output", body.output_device)
         output = (output_id, 1 if calibration else min(2, capacity))
-    try:
-        sd.check_input_settings(
-            device=input_id, channels=input_channels, samplerate=body.sr, dtype="float32"
-        )
-        if output is not None:
-            sd.check_output_settings(
-                device=output[0], channels=output[1], samplerate=body.sr, dtype="float32"
-            )
-    except sd.PortAudioError as exc:
-        raise HTTPException(422, str(exc)) from exc
+    check_device_settings(sd, "input", input_id, input_channels, body.sr)
+    if output is not None:
+        check_device_settings(sd, "output", *output, body.sr)
     return InputDevice(sd, input_id, input_channels), output
 
 
@@ -342,6 +346,20 @@ class Recording:
         finally:
             if not opened:
                 self.armed = None
+
+    @asynccontextmanager
+    async def rir_devices(self):
+        async with self.lock:
+            if self.take is not None:
+                raise HTTPException(409, "Stop recording before using the RIR audio devices")
+            try:
+                await self._close_monitor()
+                yield
+            finally:
+                try:
+                    await self._restore_arm()
+                finally:
+                    await self.connections.broadcast(self.state())
 
     def _finish_take(self, take: ActiveTake) -> list[dict]:
         recorded = take.writer.capture.finish()

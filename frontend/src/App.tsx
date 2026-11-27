@@ -21,6 +21,7 @@ import { TfSelection } from './lanes/TfSelection';
 import { EditMenu, SelectionActions, type SelectionCommands } from './lanes/SelectionActions';
 import type { TfSelection as TfSelectionState } from './state/tfSelection';
 import { Display } from './panels/Display';
+import { Rir } from './panels/Rir';
 import { Dataset } from './panels/Dataset';
 import { FrequencyAnalysis } from './panels/FrequencyAnalysis';
 import type { AnalyzerSpectrumResult } from './panels/FrequencyAnalysis';
@@ -258,6 +259,7 @@ export default function App() {
   const recordingTransition = useRef(false);
   const [working, setWorking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [rirVisible, setRirVisible] = useState(false);
   const [directory, setDirectory] = useState<Directory | null>(null); const [path, setPath] = useState('~');
   const [tensorIntakes, setTensorIntakes] = useState<QueuedTensor[]>([]);
   const nextTensorId = useRef(0);
@@ -513,6 +515,11 @@ export default function App() {
       previous?.api.setActive();
       localStorage.setItem('vsr-layout', JSON.stringify(dock.toJSON()));
     }
+    const rir = dock.api.getPanel('rir') ?? dock.addPanel({ id: 'rir', component: 'rir', title: 'RIR', inactive: true,
+      position: { referencePanel: 'frequency-analysis', direction: 'within' } });
+    setRirVisible(rir.api.isVisible);
+    const rirVisibility = rir.api.onDidVisibilityChange(({ isVisible }) => setRirVisible(isVisible));
+    localStorage.setItem('vsr-layout', JSON.stringify(dock.toJSON()));
     const nameTabs = () => element.querySelectorAll<HTMLElement>('.dv-default-tab-content').forEach(tab => { tab.title = tab.innerText; });
     nameTabs();
     const listener = dock.onDidLayoutChange(() => { nameTabs(); localStorage.setItem('vsr-layout', JSON.stringify(dock.toJSON())); });
@@ -522,7 +529,7 @@ export default function App() {
     const activePanel = dock.api.onDidActivePanelChange(({ panel }) => refreshCatalogForPanel(panel?.id));
     refreshCatalogForPanel(dock.api.activePanel?.id);
     const resize = new ResizeObserver(() => dock.layout(element.clientWidth, element.clientHeight)); resize.observe(element);
-    return () => { resize.disconnect(); activePanel.dispose(); listener.dispose(); dockRef.current = null; dock.dispose(); };
+    return () => { resize.disconnect(); activePanel.dispose(); rirVisibility.dispose(); listener.dispose(); dockRef.current = null; dock.dispose(); };
   }, [refreshAnalyzers]);
   const start = Math.min(0, ...lanes.map(lane => lane.offset));
   const end = Math.max(0.001, ...lanes.map(lane => lane.offset + laneDuration(lane)));
@@ -904,6 +911,13 @@ export default function App() {
     dataset: <Dataset catalog={catalog} progress={datasetProgress} open={file => run(open(file).then(() => dockRef.current?.api.getPanel('lanes')?.api.setActive()))} />,
     'frequency-analysis': <FrequencyAnalysis lanes={audioLanes} views={audioViews} selectedView={selectedView} channels={channels} selection={selection} playhead={playhead} hoverTime={analysisHover} tfSelection={tfSelection}
       analyzerSpectra={analyzerSpectra.filter(item => lanes.some(lane => lane.id === item.lane))} selectedSpectrum={selectedSpectrum} onSelectSpectrum={setSelectedSpectrum} />,
+    rir: <Rir lane={activeAudio} channel={activeAudio ? channels[activeAudio.id] ?? 0 : 0} changeChannel={channel => {
+      if (activeAudio) setChannels(old => ({ ...old, [activeAudio.id]: channel }));
+    }} active={rirVisible} devices={devices} disabled={working || recording} perform={perform}
+      selectMeasuredLane={lane => {
+        savedTakeLane.current = lane.id;
+        setLanes(old => old.some(item => item.id === lane.id) ? old : [...old, lane]);
+      }} />,
     analyzers: <Analyzers lane={analyzerLane} catalog={catalog} channel={analyzerChannel} selection={analyzerInterval}
       disabled={working} pending={analyzerPending} feedback={analyzerFeedback}
       refresh={() => perform(refreshAnalyzers)} execute={executeAnalyzer} />,

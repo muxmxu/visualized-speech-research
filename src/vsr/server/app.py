@@ -49,6 +49,7 @@ from vsr.server.routes_analyzers import register_analyzers
 from vsr.server.routes_datasets import register_datasets
 from vsr.server.routes_edit import register_edit
 from vsr.server.routes_record import register_record
+from vsr.server.routes_rir import register_rir
 from vsr.server.routes_spectrogram import register_spectrogram
 from vsr.server.session import Lane, Session
 from vsr.server.ws import Connections
@@ -639,6 +640,7 @@ def create_app(
     recording = register_record(
         app, session, find_audio, connections, Path(config["recordings_dir"]).expanduser().resolve()
     )
+    register_rir(app, session, find_audio, publish_lanes, recording, _heavy_compute)
     register_spectrogram(app, session, find, _heavy_compute, cache_bytes)
 
     @app.get("/api/settings")

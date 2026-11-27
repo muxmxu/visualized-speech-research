@@ -25,6 +25,7 @@ class Lane:
     mute: bool = False
     solo: bool = False
     record_warnings: list[dict] = field(default_factory=list)
+    rir_time_zero_calibrated: bool | None = None
 
     frame_rate: float | None = None
     frame_t0: float = 0.0
@@ -65,6 +66,8 @@ class Lane:
             for key, value in vars(self).items()
             if key not in fields and not key.startswith("_")
         }
+        if self.rir_time_zero_calibrated is None:
+            del meta["rir_time_zero_calibrated"]
         if self.kind != "audio":
             del meta["record_warnings"]
         if self.kind == "curve":
@@ -99,18 +102,25 @@ class RecordingMetadata:
     sr: int
     offset: float
     record_warnings: list[dict]
+    rir_time_zero_calibrated: bool | None
     saved_content_version: int
 
     @classmethod
     def from_lane(cls, lane: Lane):
         return cls(
-            lane.source, lane.sr, lane.offset, lane.record_warnings, lane._saved_content_version
+            lane.source,
+            lane.sr,
+            lane.offset,
+            lane.record_warnings,
+            lane.rir_time_zero_calibrated,
+            lane._saved_content_version,
         )
 
     def apply(self, lane: Lane) -> None:
         lane.source = self.source
         lane.sr = self.sr
         lane.record_warnings = self.record_warnings
+        lane.rir_time_zero_calibrated = self.rir_time_zero_calibrated
         lane._saved_content_version = self.saved_content_version
 
 
@@ -210,7 +220,12 @@ class Session:
             created,
             {
                 lane.id: RecordingMetadata(
-                    take.source, take.sr, take.offset, take.record_warnings, lane.version + 1
+                    take.source,
+                    take.sr,
+                    take.offset,
+                    take.record_warnings,
+                    take.rir_time_zero_calibrated,
+                    lane.version + 1,
                 )
                 for lane, take in replacements
             },

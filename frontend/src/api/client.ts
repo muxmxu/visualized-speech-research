@@ -3,6 +3,7 @@ import { createElement } from 'react';
 import { decodeFrame } from './frame';
 import type { FrameArray } from './frame';
 import type { AnalyzerCatalog, AnalyzerCurveData, AnalyzerLaneResult, AnalyzerRequest, AnalyzerResult, AnalyzerScalarResult, AnalyzerSpectrum, EventInterval } from './types';
+import type { RirAnalysisRequest, RirAnalysisResult, RirMeasureRequest, RirMeasureResult, RirSweep } from './types';
 import type { ApiFailure, DatasetLtas, DatasetScan, DatasetTable } from './types';
 import type { AudioDevices, Lane, LaneEdit, MixdownRequest, RecordArm, RecordCalibrate, RecordStart, RecordState, SaveSubtype } from './types';
 
@@ -110,4 +111,14 @@ export async function datasetLtas(id: string, groups: Record<string, number[]>, 
   return { groups: header.groups as string[], unit: header.unit as 'db_per_hz',
     frequencies: data.freqs.data as Float32Array, mean: data.mean.data as Float32Array,
     p10: data.p10.data as Float32Array, p90: data.p90.data as Float32Array };
+}
+
+export function analyzeRir(options: RirAnalysisRequest, signal: AbortSignal) {
+  return json<RirAnalysisResult>('/rir/analyze', { ...body(options), signal });
+}
+export function measureRir(options: RirMeasureRequest) {
+  return json<RirMeasureResult>('/rir/measure', body(options));
+}
+export function previewRirSweep(options: RirSweep) {
+  return json<{ ok: true }>('/rir/sweep_preview', body(options));
 }
