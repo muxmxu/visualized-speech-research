@@ -10,6 +10,8 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 A Chromium browser inspection rendered the VSR toolbar and analysis panels without page errors.
 `docker compose down` removed the service container and network while preserving the named data volume, and the service was restarted for immediate use.
 Product commit `1fb636b` was pushed to `origin/master`.
+The host `data/` folder is mounted read-only at `/data` and excluded from Git and the image build context, so audio files can be opened without being modified by the container.
+Product commit `1e9c68e` was pushed to `origin/master` after adding the read-only audio mount.
 
 ## 2026-11-27 (C3 local 0.3.0 candidate)
 
