@@ -1,9 +1,15 @@
+import os
+import stat
+from functools import partial
+
 import numpy as np
 import pytest
 import soundfile as sf
 import torch
 from fastapi.testclient import TestClient
 
+from vsr.dataset.scan import write_atomic
+from vsr.io.audio import write_audio
 from vsr.server.app import create_app
 
 
@@ -109,3 +115,31 @@ def test_interrupted_save_preserves_original(client, tmp_path, monkeypatch):
     assert set(tmp_path.glob("*.wav")) == {path, alias}
     assert not list(tmp_path.glob("*.tmp"))
     assert client.get("/api/session").json()["lanes"][0]["dirty"]
+
+
+WRITERS = {
+    "audio": lambda path: write_audio(path, torch.zeros(1, 8), 8000, "WAV", "FLOAT"),
+    "csv": lambda path: write_atomic(path, lambda document: document.write("a\n")),
+    "npz": lambda path: write_atomic(path, partial(np.savez, x=np.zeros(2)), binary=True),
+}
+
+
+@pytest.fixture
+def umask():
+    previous = os.umask(0o027)
+    yield 0o027
+    os.umask(previous)
+
+
+@pytest.mark.parametrize("writer", WRITERS)
+@pytest.mark.parametrize("original_mode", [None, 0o664])
+def test_atomic_write_mode(tmp_path, umask, writer, original_mode):
+    path = tmp_path / "output"
+    if original_mode is not None:
+        path.write_bytes(b"original")
+        path.chmod(original_mode)
+    WRITERS[writer](path)
+    expected = 0o666 & ~umask if original_mode is None else original_mode
+    assert stat.S_IMODE(path.stat().st_mode) == expected
+    assert path.read_bytes() != b"original"
+    assert [entry.name for entry in tmp_path.iterdir()] == ["output"]
