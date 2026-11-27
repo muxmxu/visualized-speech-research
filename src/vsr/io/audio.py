@@ -23,8 +23,10 @@ def read_audio(path: Path) -> tuple[torch.Tensor, int]:
 def atomic_path(path: Path) -> Iterator[Path]:
     """Yield a sibling temporary file that replaces `path` when the block succeeds."""
     temporary = path.with_name(f".{path.name}.{secrets.token_hex(8)}.tmp")
-    # Unlike mkstemp's 0o600, mode 0o666 under the umask gives a new file the default mode.
-    os.close(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666))
+    # Owner-only while replacing a file, as its mode may be stricter than the default. A new file
+    # gets 0o666 under the umask, the default mode (unlike mkstemp's 0o600).
+    mode = 0o600 if path.exists() else 0o666
+    os.close(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode))
     try:
         yield temporary
         # Applied after writing so that a read-only original can still be replaced.

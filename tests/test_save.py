@@ -9,7 +9,7 @@ import torch
 from fastapi.testclient import TestClient
 
 from vsr.dataset.scan import write_atomic
-from vsr.io.audio import write_audio
+from vsr.io.audio import atomic_path, write_audio
 from vsr.server.app import create_app
 
 
@@ -143,3 +143,12 @@ def test_atomic_write_mode(tmp_path, umask, writer, original_mode):
     assert stat.S_IMODE(path.stat().st_mode) == expected
     assert path.read_bytes() != b"original"
     assert [entry.name for entry in tmp_path.iterdir()] == ["output"]
+
+
+def test_overwrite_temporary_is_owner_only_while_writing(tmp_path, umask):
+    path = tmp_path / "output"
+    path.write_bytes(b"original")
+    path.chmod(0o600)
+    with atomic_path(path) as temporary:
+        temporary.write_bytes(b"new")
+        assert oct(stat.S_IMODE(temporary.stat().st_mode)) == "0o600"
