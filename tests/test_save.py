@@ -132,7 +132,7 @@ def umask():
 
 
 @pytest.mark.parametrize("writer", WRITERS)
-@pytest.mark.parametrize("original_mode", [None, 0o664])
+@pytest.mark.parametrize("original_mode", [None, 0o664, 0o444])
 def test_atomic_write_mode(tmp_path, umask, writer, original_mode):
     path = tmp_path / "output"
     if original_mode is not None:

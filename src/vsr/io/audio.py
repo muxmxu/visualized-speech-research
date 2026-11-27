@@ -1,4 +1,4 @@
-"""Read audio and write explicitly saved audio atomically."""
+"""Read audio, and write files atomically: explicitly saved audio and the `vsr scan` outputs."""
 
 import os
 import secrets
@@ -26,9 +26,10 @@ def atomic_path(path: Path) -> Iterator[Path]:
     # Unlike mkstemp's 0o600, mode 0o666 under the umask gives a new file the default mode.
     os.close(os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o666))
     try:
+        yield temporary
+        # Applied after writing so that a read-only original can still be replaced.
         if path.exists():
             os.chmod(temporary, stat.S_IMODE(path.stat().st_mode))
-        yield temporary
         os.replace(temporary, path)
     finally:
         temporary.unlink(missing_ok=True)
