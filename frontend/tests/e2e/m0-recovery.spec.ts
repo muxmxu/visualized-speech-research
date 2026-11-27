@@ -79,6 +79,30 @@ test('refreshes the session when the WebSocket opens after a lane change was bro
   await expect(page.getByLabel('Waveform tone.wav')).toBeVisible();
 });
 
+test('applies only the latest session response when responses arrive out of order', async ({ page, server }) => {
+  let fetched: () => void = () => undefined; let release: () => void = () => undefined;
+  const stale = new Promise<void>(resolve => { fetched = resolve; });
+  const held = new Promise<void>(resolve => { release = resolve; });
+  let first = true;
+  await page.route('**/api/session', async route => {
+    if (!first) return route.continue();
+    first = false;
+    const response = await route.fetch();
+    fetched();
+    await held;
+    await route.fulfill({ response });
+  });
+  await page.goto(`${server.url}/?token=${server.token}`);
+  await stale;
+  const opened = await page.request.post(`${server.url}/api/open`, { headers: { Authorization: `Bearer ${server.token}` }, data: { paths: [server.audio] } });
+  expect(opened.ok()).toBe(true);
+  await expect(page.getByLabel('Waveform tone.wav')).toBeVisible();
+  release();
+  // The held response carries the session from before the file was opened; no lane may disappear once it is applied.
+  await page.waitForTimeout(500);
+  await expect(page.getByLabel('Waveform tone.wav')).toBeVisible();
+});
+
 test('shows a lasting notification when the WebSocket closes', async ({ page, server }) => {
   const socket = {} as { route: WebSocketRoute };
   await page.routeWebSocket('**/ws?*', route => { socket.route = route; route.connectToServer(); });

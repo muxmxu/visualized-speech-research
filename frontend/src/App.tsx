@@ -409,7 +409,13 @@ export default function App() {
   useEffect(() => { if (playback.current) run(playback.current.update(lanes.filter(lane => lane.kind === 'audio'), channels)); }, [lanes, channels]);
   useEffect(() => { playback.current?.setLoop(loop); }, [loop]);
   useEffect(() => () => { playback.current?.stop(); void playback.current?.context.close(); }, []);
-  const refresh = useCallback(async () => { const result = await json<{ lanes: WorkspaceLane[] }>('/session'); setLanes(result.lanes); }, []);
+  // Responses can arrive out of order; only the one for the latest request is applied.
+  const latestSession = useRef(0);
+  const refresh = useCallback(async () => {
+    const id = ++latestSession.current;
+    const result = await json<{ lanes: WorkspaceLane[] }>('/session');
+    if (id === latestSession.current) setLanes(result.lanes);
+  }, []);
   const refreshAnalyzers = useCallback(async () => { setCatalog(await analyzers()); }, []);
   const acceptRecordState = useCallback((state: RecordState) => {
     const previous = recordStateRef.current;
