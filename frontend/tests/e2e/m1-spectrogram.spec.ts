@@ -521,6 +521,34 @@ test('stereo frequency zoom anchors the pointed channel midpoint', async ({ page
   expect(lo + fraction * (hi - lo)).toBeCloseTo(4000 * fraction, 3);
 });
 
+test('stereo frequency axis labels each stacked channel with its own range', async ({ page, server }) => {
+  await page.goto(`${server.url}/?token=${server.token}`);
+  const samples = 48000; const bytes = Buffer.alloc(44 + samples * 4);
+  server.bytes.copy(bytes, 0, 0, 44); bytes.writeUInt32LE(bytes.length - 8, 4);
+  bytes.writeUInt16LE(2, 22); bytes.writeUInt32LE(48000, 24); bytes.writeUInt32LE(192000, 28); bytes.writeUInt16LE(4, 32); bytes.writeUInt32LE(samples * 4, 40);
+  for (let i = 0; i < samples; i++) { const value = Math.round(12000 * Math.sin(2 * Math.PI * 440 * i / 48000)); bytes.writeInt16LE(value, 44 + i * 4); bytes.writeInt16LE(-value, 46 + i * 4); }
+  await page.locator('.lanes').dispatchEvent('drop', { dataTransfer: await page.evaluateHandle(data => { const transfer = new DataTransfer(); transfer.items.add(new File([new Uint8Array(data)], 'stereo48.wav', { type: 'audio/wav' })); return transfer; }, [...bytes]) });
+  const surfaces = page.getByLabel('Spectrogram stereo48.wav');
+  await expect(surfaces).toHaveCount(2);
+  const format = (frequency: number) => frequency >= 1000 ? `${(frequency / 1000).toFixed(frequency % 1000 ? 1 : 0)}k` : String(Math.round(frequency));
+  const high = format(Number(await page.getByLabel('Frequency high').inputValue()));
+  const low = format(Number(await page.getByLabel('Frequency low').inputValue()));
+  const groups = page.locator('.lane .frequency-axis .axis-labels');
+  await expect(groups).toHaveCount(2);
+  const labels = await groups.evaluateAll(nodes => nodes.map(node => {
+    const spans = [...node.querySelectorAll('span')];
+    return { top: spans[0].getBoundingClientRect().top, bottom: (spans.at(-1) as HTMLElement).getBoundingClientRect().bottom, text: spans.map(span => span.textContent) };
+  }));
+  const rects = await surfaces.evaluateAll(nodes => nodes.map(node => node.getBoundingClientRect()).map(rect => ({ top: rect.top, bottom: rect.bottom })));
+  expect(rects[1].top).toBeGreaterThanOrEqual(rects[0].bottom - 1);
+  for (const [channel, rect] of rects.entries()) {
+    expect(Math.abs(labels[channel].top - rect.top)).toBeLessThanOrEqual(1);
+    expect(Math.abs(labels[channel].bottom - rect.bottom)).toBeLessThanOrEqual(1);
+    expect(labels[channel].text[0]).toBe(high);
+    expect(labels[channel].text.at(-1)).toBe(low);
+  }
+});
+
 test('palette changes do not upload spectral matrices', async ({ page, server }) => {
   await page.addInitScript(() => {
     const original = Object.getOwnPropertyDescriptor(WebGL2RenderingContext.prototype, 'texImage2D')?.value as WebGL2RenderingContext['texImage2D'];

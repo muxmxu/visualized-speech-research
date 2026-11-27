@@ -184,13 +184,16 @@ function TimeInput({ label, value, onChange }: { label: string; value: number; o
     onChange={event => { const text = event.target.value; const number = Number(text); const result = onChange(number); setDraft(result === number ? text : String(result)); }} />;
 }
 
-function FrequencyAxis({ config, lane, frame, change }: { config: ViewConfig; lane: SessionLane; frame?: SpectralFrame; change: (patch: ViewPatch) => void }) {
+function FrequencyAxis({ config, lane, channels, frame, change }: { config: ViewConfig; lane: SessionLane; channels: number; frame?: SpectralFrame; change: (patch: ViewPatch) => void }) {
   const drag = useRef<{ y: number; lo: number; hi: number } | null>(null);
   const scale = viewScale(config);
   const isFeature = lane.kind === 'feature';
   const isMel = config.kind === 'audio' && config.transform === 'mel';
   const label = (frequency: number) => frequency >= 1000 ? `${(frequency / 1000).toFixed(frequency % 1000 ? 1 : 0)}k` : String(Math.round(frequency));
-  const height = config.kind === 'audio' && config.mode === 'W+S' ? `${config.split * 100}%` : 0;
+  // Stacked channel surfaces share the area below the waveform; each gets its own label set.
+  const top = config.kind === 'audio' && config.mode === 'W+S' ? config.split : 0;
+  const span = (1 - top) / channels;
+  const place = (channel: number) => ({ top: `${(top + span * channel) * 100}%`, bottom: `${span * (channels - 1 - channel) * 100}%` });
   const bounds = frequencyViewport(config);
   const packetLabels = (isFeature || isMel) && frame && frame.rows > 0
     ? [...new Set([0, Math.floor((frame.rows - 1) / 2), frame.rows - 1])].flatMap(row => {
@@ -217,9 +220,9 @@ function FrequencyAxis({ config, lane, frame, change }: { config: ViewConfig; la
         change({ f_lo: lo, f_hi: lo * ratio });
       }
     }} onPointerUp={() => { drag.current = null; }}>
-    {isFeature || isMel ? <div className="axis-labels packet-axis" style={{ top: height }}>
+    {Array.from({ length: channels }, (_, channel) => isFeature || isMel ? <div key={channel} className="axis-labels packet-axis" style={place(channel)}>
       <SpectralLabels labels={packetLabels} align="right" />
-    </div> : <div className="axis-labels" style={{ top: height }}><span>{label(config.f_hi)}</span><span>{label(scale === 'log' ? Math.sqrt(config.f_lo * config.f_hi) : (config.f_lo + config.f_hi) / 2)}</span><span>{label(config.f_lo)}</span></div>}
+    </div> : <div key={channel} className="axis-labels" style={place(channel)}><span>{label(config.f_hi)}</span><span>{label(scale === 'log' ? Math.sqrt(config.f_lo * config.f_hi) : (config.f_lo + config.f_hi) / 2)}</span><span>{label(config.f_lo)}</span></div>)}
   </div>;
 }
 
@@ -1095,7 +1098,7 @@ export default function App() {
             </button>;
           })}</div>}
         </div>
-        {spectrum ? <FrequencyAxis config={spectrum.config} lane={spectrum.lane} frame={frames.current.get(`${config.id}:${channelList[0]}`)?.frame} change={update} />
+        {spectrum ? <FrequencyAxis config={spectrum.config} lane={spectrum.lane} channels={channelList.length} frame={frames.current.get(`${config.id}:${channelList[0]}`)?.frame} change={update} />
           : <div className="frequency-axis analyzer-axis">{lane.kind === 'curve' && lane.unit}</div>}
         <LanePlot lane={lane} view={view} isSelected={config.id === selectedView} working={working}
           commands={audio && timeCommands(audio)} mode={mode} split={split} setSplit={split => update({ split })} onHover={hoverLane}
