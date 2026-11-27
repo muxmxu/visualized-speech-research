@@ -4,6 +4,14 @@ run 的过程记录：周期与 phase 怎样拆分、task 怎样实现、核对�
 
 本文件进 git：Human 的原话以 H<n> 引用（原文在状态目录的 `human-inputs.md`），不写个人信息与机器信息（本机相关的内容写在状态目录的 `local.md`）。run 开始之前的设计与接入记录在本机状态目录的 `history/`，不在本仓库。
 
+## 2026-11-27 (H64: final delivery reconciliation)
+
+Human requested final commit and push reconciliation and a handoff so a different coding agent can continue tracking development.
+The Docker deployment and read-only host audio mount are committed and pushed; `origin/master` includes records commit `4456905570a3cbe35b51c8ee60e4581d17b291ad`.
+The Compose page and authenticated session were checked in a browser, and the requested `down` lifecycle preserved the data volume.
+The private workspace copy remains pending an exact transfer route; no target or path was inferred.
+Formal `v0.3.0` tagging/release remains pending B2 and the final Human repository-history review, and M4/M7 physical-device checks remain unverified.
+
 ## 2026-11-27 (H62–H63: Docker Compose delivery)
 
 `docker compose up --build` built the frontend and locked Python runtime, and the local service returned the application page, bundled assets and authenticated session successfully.
