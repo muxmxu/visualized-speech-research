@@ -43,6 +43,16 @@ import { exposePlayback, exposeSpectra } from './audio/testHook';
 function report(error: unknown) { if (!(error instanceof ApiError)) notifications.show({ title: 'Request failed', message: String(error), color: 'red' }); }
 function run(action: Promise<unknown>) { void action.catch(report); }
 
+// Browser storage is a trust boundary: anything but a JSON array of strings is an empty list.
+function storedRecent(): string[] {
+  let value: unknown;
+  try { value = JSON.parse(localStorage.getItem('vsr-recent') ?? '[]'); } catch (error) {
+    if (error instanceof SyntaxError) return [];
+    throw error;
+  }
+  return Array.isArray(value) && value.every((item): item is string => typeof item === 'string') ? value : [];
+}
+
 const idleRecording: RecordState = { type: 'record_state', state: 'idle', mapping: [], start_time: null, notice: null };
 const warningLabels: Record<RecordingWarning['type'], string> = {
   input_overflow: 'Input overflow', output_underflow: 'Output underflow',
@@ -271,7 +281,7 @@ export default function App() {
     const queued = tensors.map(tensor => ({ id: nextTensorId.current++, tensor, remember }));
     setTensorIntakes(old => [...old, ...queued]);
   }, []);
-  const [recent, setRecent] = useState<string[]>(() => JSON.parse(localStorage.getItem('vsr-recent') ?? '[]') as string[]);
+  const [recent, setRecent] = useState(storedRecent);
   const [settings, setSettings] = useState<Settings | null>(null);
   const playback = useRef<Playback | null>(null);
   const [playing, setPlaying] = useState(false); const [loop, setLoop] = useState(false);

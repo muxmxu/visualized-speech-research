@@ -29,6 +29,16 @@ async function openTone(page: Page, server: { url: string; token: string; audio:
   await expect(page.getByLabel('Waveform tone.wav')).toBeVisible();
 }
 
+for (const saved of ['null', '{}', '[{"path":"/a.wav"}]', '["/a.wav",1]', 'not json']) {
+  test(`treats a stored recent list ${saved} that is not an array of strings as empty`, async ({ page, server }) => {
+    await page.addInitScript(value => localStorage.setItem('vsr-recent', value), saved);
+    await page.goto(`${server.url}/?token=${server.token}`);
+    await expectWorkspace(page);
+    await expect(page.getByLabel('Directory')).not.toHaveValue('~');
+    await expect(page.locator('.files-panel .file')).toHaveCount(0);
+  });
+}
+
 test('refreshes the session when the WebSocket opens after a lane change was broadcast', async ({ page, server }) => {
   let connect: () => void = () => undefined;
   const opened = new Promise<void>(resolve => { connect = resolve; });
