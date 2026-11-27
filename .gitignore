@@ -1,4 +1,5 @@
 agent_workspace/
+/data/
 /ORCHESTRATION.md
 .venv/
 .pytest_cache/
